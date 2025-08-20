@@ -291,6 +291,36 @@ describe('App tests', () => {
     expect(screen.queryByRole('list', { name: /contraction history/i })).toBeInTheDocument();
   });
 
+  test('disables side-effect controls for monitor persona', () => {
+    localStorage.clear();
+    localStorage.setItem(localStorageKey, JSON.stringify({
+      timer: {
+        running: false,
+        contractions: [
+          { start: 1577882099000, duration: 1000 },
+        ],
+      },
+      session: {
+        persona: 'monitor',
+      },
+    }));
+
+    render(<App />, undefined, true);
+
+    const start = screen.getByRole('button', { name: /start/i });
+    const pause = screen.getByRole('button', { name: /take a break/i });
+
+    expect(start).toHaveAttribute('disabled');
+    expect(pause).toHaveAttribute('disabled');
+
+    fireEvent.click(screen.getByRole('link', { name: /history/i }));
+
+    const clear = screen.getByRole('button', { name: /clear/i });
+
+    expect(clear).toHaveAttribute('disabled');
+    localStorage.clear();
+  });
+
   test('saves state to localStorage', () => {
     const advanceTime = startFakeTimer();
     jest.spyOn(Object.getPrototypeOf(localStorage), 'setItem').mockImplementation(noop);

@@ -4,6 +4,7 @@ import { Status } from '../../../models/status.model';
 
 interface Props {
   status: Status;
+  disabled?: boolean;
 }
 
 export const StyledPrimaryControl = styled.button<Props>`
@@ -16,6 +17,10 @@ export const StyledPrimaryControl = styled.button<Props>`
   border-radius: 50%;
   background-color: ${color('neutralMin')};
   color: ${statusColor};
+
+  ${({ disabled }) => disabled && css`
+    opacity: 0.5;
+  `}
 
   ${breakpoint('s', css`
     width: ${pxToRem(100)};
