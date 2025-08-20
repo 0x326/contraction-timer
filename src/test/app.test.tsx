@@ -11,6 +11,7 @@ const localStorageData = JSON.stringify({
       { start: 1577882099000, duration: 1000 },
     ],
   },
+  session: {},
 });
 
 describe('App tests', () => {

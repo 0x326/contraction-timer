@@ -63,6 +63,10 @@ const timerSlice = createSlice({
         }
       },
     },
+    setFromServer: (state, action: PayloadAction<TimerState>) => {
+      state.running = action.payload.running;
+      state.contractions = action.payload.contractions;
+    },
   },
 });
 
