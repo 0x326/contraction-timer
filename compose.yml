@@ -1,0 +1,15 @@
+services:
+  frontend:
+    build:
+      context: .
+      target: frontend
+      args:
+        REACT_APP_SERVER_URL: http://backend:4000
+    ports:
+      - "3000:80"
+  backend:
+    build:
+      context: .
+      target: backend
+    ports:
+      - "4000:4000"
