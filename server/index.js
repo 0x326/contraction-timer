@@ -6,33 +6,39 @@ const app = express();
 const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
-let leaderSocketId = null;
-let lastSeq = 0;
+const lobbies = new Map();
 
 io.on('connection', (socket) => {
+  const { lobby = 'default' } = socket.handshake.query;
+  if (!lobbies.has(lobby)) {
+    lobbies.set(lobby, { leaderSocketId: null, lastSeq: 0 });
+  }
+  socket.join(lobby);
+  const lobbyState = lobbies.get(lobby);
+
   socket.on('verify-leader', () => {
-    socket.emit('leader', socket.id === leaderSocketId);
+    socket.emit('leader', socket.id === lobbyState.leaderSocketId);
   });
 
   socket.on('request-leader', () => {
-    if (leaderSocketId && leaderSocketId !== socket.id) {
-      io.to(leaderSocketId).emit('leader', false);
+    if (lobbyState.leaderSocketId && lobbyState.leaderSocketId !== socket.id) {
+      io.to(lobbyState.leaderSocketId).emit('leader', false);
     }
-    leaderSocketId = socket.id;
-    lastSeq = 0;
+    lobbyState.leaderSocketId = socket.id;
+    lobbyState.lastSeq = 0;
     socket.emit('leader', true);
   });
 
   socket.on('timer-state', (payload) => {
-    if (socket.id !== leaderSocketId) return;
-    if (payload.seq <= lastSeq) return;
-    lastSeq = payload.seq;
-    socket.broadcast.emit('timer-state', payload.state);
+    if (socket.id !== lobbyState.leaderSocketId) return;
+    if (payload.seq <= lobbyState.lastSeq) return;
+    lobbyState.lastSeq = payload.seq;
+    socket.to(lobby).emit('timer-state', payload.state);
   });
 
   socket.on('disconnect', () => {
-    if (socket.id === leaderSocketId) {
-      leaderSocketId = null;
+    if (socket.id === lobbyState.leaderSocketId) {
+      lobbyState.leaderSocketId = null;
     }
   });
 });

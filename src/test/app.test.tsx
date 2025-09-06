@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, startFakeTimer, within } from './utils/test.utils';
+import { cleanup, fireEvent, render, screen, startFakeTimer, within } from './utils/test.utils';
 import { App } from '../components/app/app.component';
 import React from 'react';
 
@@ -192,6 +192,17 @@ describe('App tests', () => {
 
     expect(screen.getByRole('button', { name: /start/i })).toHaveAttribute('disabled');
     expect(screen.getByRole('button', { name: /take a break/i })).toHaveAttribute('disabled');
+  });
+
+  test('shows leader button only for recorder role', () => {
+    window.history.replaceState({}, '', '/?role=recorder');
+    render(<App />, '', false, false);
+    expect(screen.getByRole('button', { name: /become leader/i })).toBeInTheDocument();
+    cleanup();
+
+    window.history.replaceState({}, '', '/?role=monitor');
+    render(<App />, '', false, false);
+    expect(screen.queryByRole('button', { name: /become leader/i })).not.toBeInTheDocument();
   });
 
   test('displays empty history when there are no completed contractions', () => {

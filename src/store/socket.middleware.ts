@@ -7,8 +7,11 @@ import { timerActions } from './timer/timer.slice';
 
 export const socketMiddleware: Middleware<{}, AppState> = (store) => {
   let seq = 0;
+  const lobby = typeof window !== 'undefined'
+    ? window.location.pathname.replace(/^\//, '') || 'default'
+    : 'default';
   const socket: Socket | null = typeof window !== 'undefined' && process.env.NODE_ENV !== 'test'
-    ? io('http://localhost:3001')
+    ? io('http://localhost:3001', { query: { lobby } })
     : null;
 
   if (socket) {

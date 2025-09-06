@@ -8,6 +8,11 @@ import { AppState } from '../../store/root.reducer';
 import { StyledLeaderButton } from './leader-button.styles';
 
 export const LeaderButton: React.FC = () => {
+  const role = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('role')
+    : null;
+  if (role !== 'recorder') return null;
+
   const dispatch = useDispatch();
   const isLeader = useSelector((state: AppState) => state.leader.isLeader);
 
