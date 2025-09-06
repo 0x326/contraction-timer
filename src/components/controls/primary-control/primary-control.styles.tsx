@@ -17,6 +17,10 @@ export const StyledPrimaryControl = styled.button<Props>`
   background-color: ${color('neutralMin')};
   color: ${statusColor};
 
+  &:disabled {
+    opacity: 0.5;
+  }
+
   ${breakpoint('s', css`
     width: ${pxToRem(100)};
     height: ${pxToRem(100)};

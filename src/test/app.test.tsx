@@ -187,6 +187,13 @@ describe('App tests', () => {
     expect(pause).toHaveAttribute('disabled');
   });
 
+  test('disables timer controls when not the leader', () => {
+    render(<App />, '', false, false);
+
+    expect(screen.getByRole('button', { name: /start/i })).toHaveAttribute('disabled');
+    expect(screen.getByRole('button', { name: /take a break/i })).toHaveAttribute('disabled');
+  });
+
   test('displays empty history when there are no completed contractions', () => {
     render(<App />);
 

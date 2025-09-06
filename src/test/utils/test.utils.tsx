@@ -1,6 +1,7 @@
 import { act, render as rtlRender } from '@testing-library/react';
 import { appTheme } from '../../theme/app.theme';
 import { createStore } from '../../store/app.store';
+import { leaderActions } from '../../store/leader/leader.slice';
 import { MemoryRouter } from 'react-router-dom';
 import moment from 'moment-mini';
 import { Provider } from 'react-redux';
@@ -24,8 +25,11 @@ export const startFakeTimer = () => {
   return advanceTime;
 };
 
-export const render = (ui: React.ReactElement, path = '', persistState = false) => {
+export const render = (ui: React.ReactElement, path = '', persistState = false, isLeader = true) => {
   const store = createStore(persistState);
+  if (isLeader) {
+    store.dispatch(leaderActions.setLeader(true));
+  }
 
   const Wrapper: React.FC = ({ children }) => (
     <MemoryRouter initialEntries={[path]}>
