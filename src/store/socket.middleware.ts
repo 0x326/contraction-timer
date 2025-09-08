@@ -1,17 +1,17 @@
 /* eslint-disable sort-imports */
 import { Middleware } from '@reduxjs/toolkit';
+import { History } from 'history';
 import { io, Socket } from 'socket.io-client';
-import { leaderActions } from './leader/leader.slice';
 import { connectionActions } from './connection/connection.slice';
+import { leaderActions } from './leader/leader.slice';
 import { AppState } from './root.reducer';
 import { timerActions } from './timer/timer.slice';
 
-export const socketMiddleware: Middleware<{}, AppState> = (store) => {
+export const createSocketMiddleware = (history: History): Middleware<{}, AppState> => (store) => {
   let seq = 0;
   let pendingState: AppState['timer'] | null = null;
-  const lobby = typeof window !== 'undefined'
-    ? window.location.pathname.replace(/^\//, '') || 'default'
-    : 'default';
+  const params = new URLSearchParams(history.location.search);
+  const lobby = params.get('lobby') || 'default';
   const socket: Socket | null = typeof window !== 'undefined' && process.env.NODE_ENV !== 'test'
     ? io('http://localhost:3001', { query: { lobby } })
     : null;
@@ -54,8 +54,8 @@ export const socketMiddleware: Middleware<{}, AppState> = (store) => {
 
       if (
         state.leader.isLeader
-        && action.type.startsWith('timer/')
-        && action.type !== timerActions.setState.type
+          && action.type.startsWith('timer/')
+          && action.type !== timerActions.setState.type
       ) {
         seq += 1;
         socket.emit('timer-state', { seq, state: state.timer });

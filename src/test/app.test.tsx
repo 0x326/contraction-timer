@@ -203,13 +203,11 @@ describe('App tests', () => {
   });
 
   test('shows leader button only for recorder role', () => {
-    window.history.replaceState({}, '', '/?role=recorder');
-    render(<App />, '', false, false);
+    render(<App />, '/?lobby=test&role=recorder', false, false);
     expect(screen.getByRole('button', { name: /become leader/i })).toBeInTheDocument();
     cleanup();
 
-    window.history.replaceState({}, '', '/?role=monitor');
-    render(<App />, '', false, false);
+    render(<App />, '/?lobby=test&role=monitor', false, false);
     expect(screen.queryByRole('button', { name: /become leader/i })).not.toBeInTheDocument();
   });
 

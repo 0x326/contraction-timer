@@ -8,8 +8,8 @@ test('timer state survives leader disconnect', async ({ browser }) => {
   const page1 = await browser.newPage();
   const page2 = await browser.newPage();
 
-  await page1.goto(`http://localhost:3000/${lobby}?role=recorder`);
-  await page2.goto(`http://localhost:3000/${lobby}?role=recorder`);
+  await page1.goto(`http://localhost:3000/?lobby=${lobby}&role=recorder`);
+  await page2.goto(`http://localhost:3000/?lobby=${lobby}&role=recorder`);
 
   await page1.click('text=Become leader');
   await expect(page1.locator('text=Leader')).toBeVisible();
@@ -24,7 +24,7 @@ test('timer state survives leader disconnect', async ({ browser }) => {
   await page1.close();
 
   const page3 = await browser.newPage();
-  await page3.goto(`http://localhost:3000/${lobby}?role=recorder`);
+  await page3.goto(`http://localhost:3000/?lobby=${lobby}&role=recorder`);
 
   await page2.click('text=Become leader');
   await expect(page2.locator('text=Leader')).toBeVisible();
