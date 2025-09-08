@@ -1,5 +1,6 @@
 import { StyledHeader, StyledHeading } from './header.styles';
 import { useDispatch, useSelector } from 'react-redux';
+import { AppState } from '../../store/root.reducer';
 import { Button } from '../button/button.component';
 import { Container } from '../container/container.component';
 import { IconType } from '../../models/icon-type.model';
@@ -17,7 +18,9 @@ export const Header: React.FC = () => {
 
   const heading = VIEW_TO_HEADING_MAP[view];
   const showClearButton = view === View.History;
-  const clearButtonDisabled = !useSelector(timerSelectors.hasCompletedContractions);
+  const hasCompletedContractions = useSelector(timerSelectors.hasCompletedContractions);
+  const isLeader = useSelector((state: AppState) => state.leader.isLeader);
+  const clearButtonDisabled = !hasCompletedContractions || !isLeader;
 
   const handleClearClick = () => {
     dispatch(modalActions.open(ModalType.ClearHistory));

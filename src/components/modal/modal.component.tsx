@@ -21,6 +21,7 @@ interface Props {
   heading: string;
   primaryButtonText: string;
   primaryButtonOnClick: () => void;
+  primaryButtonDisabled?: boolean;
   secondaryButtonText: string;
   secondaryButtonOnClick: () => void;
 }
@@ -29,6 +30,7 @@ export const Modal: React.FC<Props> = ({
   heading,
   primaryButtonText,
   primaryButtonOnClick,
+  primaryButtonDisabled = false,
   secondaryButtonText,
   secondaryButtonOnClick,
   children,
@@ -59,7 +61,7 @@ export const Modal: React.FC<Props> = ({
         <main>{children}</main>
 
         <StyledFooter>
-          <Button label={primaryButtonText} onClick={primaryButtonOnClick} type={ButtonType.Confirm} />
+          <Button label={primaryButtonText} onClick={primaryButtonOnClick} type={ButtonType.Confirm} disabled={primaryButtonDisabled} />
 
           <StyledSecondaryButton>
             <Button label={secondaryButtonText} onClick={secondaryButtonOnClick} type={ButtonType.Cancel} />
