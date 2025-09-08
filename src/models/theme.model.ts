@@ -19,8 +19,11 @@ export interface Theme {
   };
   color: {
     contraction: string;
+    contractionOffline: string;
     ready: string;
+    readyOffline: string;
     rest: string;
+    restOffline: string;
     neutralMin: string;
     neutralMin25: string;
     neutralMin50: string;

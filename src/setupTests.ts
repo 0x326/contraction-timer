@@ -11,4 +11,4 @@ jest.mock('socket.io-client', () => ({
     disconnect: jest.fn(),
     connected: true,
   }),
-}));
+}), { virtual: true });

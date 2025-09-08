@@ -36,12 +36,12 @@ describe('App tests', () => {
     expect(layout).toHaveStyle('background-color: #107cb1');
   });
 
-  test('grays out background when non-leader is disconnected', () => {
+  test('dims the background when a non-leader is disconnected', () => {
     render(<App />, '', false, false, false);
 
     const layout = screen.getByTestId('layout');
 
-    expect(layout).toHaveStyle('background-color: #6e6e6e');
+    expect(layout).toHaveStyle('background-color: #217e70');
   });
 
   test('applies focus styles when hitting tab and removes them when using a mouse', () => {

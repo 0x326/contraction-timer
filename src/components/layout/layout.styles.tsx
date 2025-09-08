@@ -12,7 +12,7 @@ export const StyledLayout = styled.div<LayoutProps>`
   flex-direction: column;
   height: 100%;
   transition: background-color ${transitionDuration('m')};
-  background-color: ${({ offline, status, theme }) => offline ? theme.color.neutralMid1 : statusColor({ theme, status })};
+  background-color: ${({ offline, status, theme }) => statusColor({ theme, status, offline })};
 `;
 
 export const StyledContent = styled.section`
