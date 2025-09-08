@@ -18,7 +18,7 @@ export const createSocketMiddleware = (history: History): Middleware<{}, AppStat
     let id = localStorage.getItem('clientId');
     if (!id) {
       if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-        id = crypto.randomUUID();
+        id = (crypto as any).randomUUID();
       } else {
         id = `${Date.now()}-${Math.random()}`;
       }

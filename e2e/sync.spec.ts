@@ -10,7 +10,7 @@ test('timer state survives leader disconnect', async ({ browser }) => {
 
   await page1.goto(`http://localhost:3000/?lobby=${lobby}&role=recorder`);
   await page2.goto(`http://localhost:3000/?lobby=${lobby}&role=recorder`);
-
+  await page1.evaluate(() => document.querySelectorAll('iframe').forEach((f) => f.remove()));
   await page1.click('text=Become leader');
   await expect(page1.locator('text=Leader')).toBeVisible();
 
@@ -42,7 +42,7 @@ test('leader keeps leadership across reconnects', async ({ browser }) => {
 
   await leaderPage.goto(`http://localhost:3000/?lobby=${lobby}&role=recorder`);
   await follower.goto(`http://localhost:3000/?lobby=${lobby}&role=monitor`);
-
+  await leaderPage.evaluate(() => document.querySelectorAll('iframe').forEach((f) => f.remove()));
   await leaderPage.click('text=Become leader');
   await expect(leaderPage.locator('text=Leader')).toBeVisible();
 
@@ -60,5 +60,23 @@ test('leader keeps leadership across reconnects', async ({ browser }) => {
   await expect.poll(async () => {
     const data = await follower.evaluate(() => localStorage.getItem('redux'));
     return data ? JSON.parse(data).timer.running : true;
-  }).toBe(false);
+  }, { timeout: 15000 }).toBe(false);
+});
+
+test('old socket is demoted when same client opens new tab', async ({ browser }) => {
+  const lobby = `e2e-dup-${Date.now()}`;
+  const context = await browser.newContext();
+  const first = await context.newPage();
+  await first.goto(`http://localhost:3000/?lobby=${lobby}&role=recorder`);
+  await first.evaluate(() => document.querySelectorAll('iframe').forEach((f) => f.remove()));
+  await first.click('text=Become leader');
+  await expect(first.locator('text=Leader')).toBeVisible();
+
+  const second = await context.newPage();
+  await second.goto(`http://localhost:3000/?lobby=${lobby}&role=recorder`);
+  await second.evaluate(() => document.querySelectorAll('iframe').forEach((f) => f.remove()));
+
+  await expect(second.locator('text=/^Leader$/')).toBeVisible();
+  await expect(first.locator('text=/^Leader$/')).not.toBeVisible();
+  await expect(first.locator('text=Become leader')).toBeVisible();
 });

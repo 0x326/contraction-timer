@@ -12,7 +12,7 @@ export default defineConfig({
       reuseExistingServer: !process.env.CI,
     },
     {
-      command: 'NODE_OPTIONS=--openssl-legacy-provider BROWSER=none PORT=3000 npm start',
+      command: 'NODE_OPTIONS=--openssl-legacy-provider npm run build && npx --yes http-server build -p 3000',
       port: 3000,
       timeout: 120000,
       reuseExistingServer: !process.env.CI,

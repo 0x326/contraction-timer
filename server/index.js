@@ -17,6 +17,7 @@ Object.entries(persisted).forEach(([lobby, data]) => {
     leaderClientId: data.leaderClientId || null,
     lastSeq: data.lastSeq || 0,
     state: data.state || null,
+    clientSockets: new Map(),
   });
 });
 
@@ -40,14 +41,30 @@ io.on('connection', (socket) => {
       leaderClientId: null,
       lastSeq: 0,
       state: null,
+      clientSockets: new Map(),
     });
     persist();
   }
   socket.join(lobby);
   const lobbyState = lobbies.get(lobby);
 
-  // Reconnecting leader retains leadership
+  if (clientId) {
+    let sockets = lobbyState.clientSockets.get(clientId);
+    if (!sockets) {
+      sockets = new Set();
+      lobbyState.clientSockets.set(clientId, sockets);
+    }
+    sockets.add(socket.id);
+  }
+
+  // Reconnecting leader retains leadership and demotes old sockets
   if (clientId && clientId === lobbyState.leaderClientId) {
+    const sockets = lobbyState.clientSockets.get(clientId) || new Set();
+    sockets.forEach((id) => {
+      if (id !== socket.id) {
+        io.to(id).emit('leader', { isLeader: false });
+      }
+    });
     lobbyState.leaderSocketId = socket.id;
     socket.emit('leader', { isLeader: true, seq: lobbyState.lastSeq });
   }
@@ -59,14 +76,23 @@ io.on('connection', (socket) => {
   socket.on('verify-leader', () => {
     const isLeader = clientId && clientId === lobbyState.leaderClientId;
     if (isLeader) {
+      const sockets = lobbyState.clientSockets.get(clientId) || new Set();
+      sockets.forEach((id) => {
+        if (id !== socket.id) {
+          io.to(id).emit('leader', { isLeader: false });
+        }
+      });
       lobbyState.leaderSocketId = socket.id;
     }
     socket.emit('leader', { isLeader, seq: lobbyState.lastSeq });
   });
 
   socket.on('request-leader', () => {
-    if (lobbyState.leaderSocketId && lobbyState.leaderSocketId !== socket.id) {
-      io.to(lobbyState.leaderSocketId).emit('leader', { isLeader: false });
+    if (lobbyState.leaderClientId && lobbyState.leaderClientId !== clientId) {
+      const oldSockets = lobbyState.clientSockets.get(lobbyState.leaderClientId) || new Set([lobbyState.leaderSocketId]);
+      oldSockets.forEach((id) => {
+        io.to(id).emit('leader', { isLeader: false });
+      });
     }
     lobbyState.leaderSocketId = socket.id;
     lobbyState.leaderClientId = clientId;
@@ -86,6 +112,15 @@ io.on('connection', (socket) => {
   socket.on('disconnect', () => {
     if (socket.id === lobbyState.leaderSocketId) {
       lobbyState.leaderSocketId = null;
+    }
+    if (clientId) {
+      const sockets = lobbyState.clientSockets.get(clientId);
+      if (sockets) {
+        sockets.delete(socket.id);
+        if (sockets.size === 0) {
+          lobbyState.clientSockets.delete(clientId);
+        }
+      }
     }
   });
 });
