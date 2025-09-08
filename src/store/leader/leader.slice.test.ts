@@ -7,9 +7,9 @@ describe('leader reducer', () => {
     expect(leaderReducer(state, action)).toEqual({ isLeader: true });
   });
 
-  it('requestLeader does not change state', () => {
+  it('requestLeadership does not change state', () => {
     const state: LeaderState = { isLeader: false };
-    const action = leaderActions.requestLeader();
+    const action = leaderActions.requestLeadership();
     expect(leaderReducer(state, action)).toEqual(state);
   });
 });

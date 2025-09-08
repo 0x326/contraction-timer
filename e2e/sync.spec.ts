@@ -57,10 +57,7 @@ test('leader keeps leadership across reconnects', async ({ browser }) => {
 
   await reconnect.click('button[aria-label="Stop"]');
 
-  await expect.poll(async () => {
-    const data = await follower.evaluate(() => localStorage.getItem('redux'));
-    return data ? JSON.parse(data).timer.running : true;
-  }, { timeout: 15000 }).toBe(false);
+  await expect(follower.locator('button[aria-label="Start"]')).toBeVisible({ timeout: 15000 });
 });
 
 test('old socket is demoted when same client opens new tab', async ({ browser }) => {

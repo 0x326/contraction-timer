@@ -17,7 +17,7 @@ export const LeaderButton: React.FC = () => {
   const isLeader = useSelector((state: AppState) => state.leader.isLeader);
 
   const handleClick = () => {
-    dispatch(leaderActions.requestLeader());
+    dispatch(leaderActions.requestLeadership());
   };
 
   return (

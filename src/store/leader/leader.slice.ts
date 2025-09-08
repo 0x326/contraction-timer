@@ -15,7 +15,7 @@ const leaderSlice = createSlice({
     setLeader: (state, action: PayloadAction<boolean>) => {
       state.isLeader = action.payload;
     },
-    requestLeader: (state) => state,
+    requestLeadership: (state) => state,
   },
 });
 

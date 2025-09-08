@@ -18,6 +18,7 @@ Object.entries(persisted).forEach(([lobby, data]) => {
     lastSeq: data.lastSeq || 0,
     state: data.state || null,
     clientSockets: new Map(),
+    pending: null,
   });
 });
 
@@ -42,6 +43,7 @@ io.on('connection', (socket) => {
       lastSeq: 0,
       state: null,
       clientSockets: new Map(),
+      pending: null,
     });
     persist();
   }
@@ -57,47 +59,82 @@ io.on('connection', (socket) => {
     sockets.add(socket.id);
   }
 
-  // Reconnecting leader retains leadership and demotes old sockets
-  if (clientId && clientId === lobbyState.leaderClientId) {
-    const sockets = lobbyState.clientSockets.get(clientId) || new Set();
-    sockets.forEach((id) => {
-      if (id !== socket.id) {
-        io.to(id).emit('leader', { isLeader: false });
-      }
-    });
-    lobbyState.leaderSocketId = socket.id;
-    socket.emit('leader', { isLeader: true, seq: lobbyState.lastSeq });
-  }
-
   if (lobbyState.state) {
     socket.emit('timer-state', lobbyState.state);
   }
-
-  socket.on('verify-leader', () => {
+  socket.on('check-leadership', () => {
     const isLeader = clientId && clientId === lobbyState.leaderClientId;
     if (isLeader) {
       const sockets = lobbyState.clientSockets.get(clientId) || new Set();
       sockets.forEach((id) => {
         if (id !== socket.id) {
-          io.to(id).emit('leader', { isLeader: false });
+          io.to(id).emit('leadership-info', { isLeader: false });
         }
       });
       lobbyState.leaderSocketId = socket.id;
     }
-    socket.emit('leader', { isLeader, seq: lobbyState.lastSeq });
+    socket.emit('leadership-info', { isLeader });
   });
 
-  socket.on('request-leader', () => {
-    if (lobbyState.leaderClientId && lobbyState.leaderClientId !== clientId) {
-      const oldSockets = lobbyState.clientSockets.get(lobbyState.leaderClientId) || new Set([lobbyState.leaderSocketId]);
-      oldSockets.forEach((id) => {
-        io.to(id).emit('leader', { isLeader: false });
-      });
+  socket.on('request-leadership', ({ seq }) => {
+    if (clientId === lobbyState.leaderClientId) {
+      lobbyState.leaderSocketId = socket.id;
+      lobbyState.lastSeq = seq;
+      socket.emit('leadership-info', { isLeader: true });
+      return;
     }
-    lobbyState.leaderSocketId = socket.id;
-    lobbyState.leaderClientId = clientId;
-    socket.emit('leader', { isLeader: true, seq: lobbyState.lastSeq });
+
+    if (lobbyState.leaderClientId) {
+      const oldSockets = lobbyState.clientSockets.get(lobbyState.leaderClientId) || new Set([lobbyState.leaderSocketId]);
+      lobbyState.pending = {
+        newSocketId: socket.id,
+        newClientId: clientId,
+        newSeq: seq,
+        oldSocketId: lobbyState.leaderSocketId,
+        timeout: setTimeout(() => {
+          finalizeTransfer(null);
+        }, 500),
+      };
+      oldSockets.forEach((id) => {
+        io.to(id).emit('leadership-info', { isLeader: false });
+      });
+      if (lobbyState.leaderSocketId) {
+        io.to(lobbyState.leaderSocketId).emit('transfer-leadership');
+      }
+    } else {
+      lobbyState.leaderSocketId = socket.id;
+      lobbyState.leaderClientId = clientId;
+      lobbyState.lastSeq = seq;
+      const payload = { isLeader: true };
+      if (lobbyState.state) payload.state = lobbyState.state;
+      socket.emit('leadership-info', payload);
+      persist();
+    }
+  });
+
+  const finalizeTransfer = (statePayload) => {
+    if (!lobbyState.pending) return;
+    const { newSocketId, newClientId, newSeq, oldSocketId, timeout } = lobbyState.pending;
+    clearTimeout(timeout);
+    if (statePayload) {
+      lobbyState.state = statePayload.state;
+    }
+    lobbyState.leaderSocketId = newSocketId;
+    lobbyState.leaderClientId = newClientId;
+    lobbyState.lastSeq = newSeq;
+    const payload = { isLeader: true };
+    if (lobbyState.state) payload.state = lobbyState.state;
+    io.to(newSocketId).emit('leadership-info', payload);
+    if (lobbyState.state) {
+      io.to(lobby).except(newSocketId).except(oldSocketId).emit('timer-state', lobbyState.state);
+    }
+    lobbyState.pending = null;
     persist();
+  };
+
+  socket.on('final-timer-state', (payload) => {
+    if (socket.id !== lobbyState.leaderSocketId) return;
+    finalizeTransfer(payload);
   });
 
   socket.on('timer-state', (payload) => {

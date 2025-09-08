@@ -27,10 +27,21 @@ export const createSocketMiddleware = (history: History): Middleware<{}, AppStat
     return id;
   };
 
+  if (typeof localStorage !== 'undefined') {
+    const saved = localStorage.getItem('seq');
+    if (saved) seq = Number(saved) || 0;
+  }
+
   const clientId = getClientId();
   const socket: Socket | null = typeof window !== 'undefined' && process.env.NODE_ENV !== 'test'
     ? io('http://localhost:3001', { query: { lobby, clientId } })
     : null;
+
+  const saveSeq = () => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.setItem('seq', String(seq));
+    }
+  };
 
   if (socket) {
     socket.on('timer-state', (timerState) => {
@@ -41,27 +52,33 @@ export const createSocketMiddleware = (history: History): Middleware<{}, AppStat
       }
     });
 
-    socket.on('leader', (payload: boolean | { isLeader: boolean; seq?: number }) => {
-      const { isLeader, seq: serverSeq } = typeof payload === 'boolean'
-        ? { isLeader: payload, seq: undefined }
-        : payload;
-      if (typeof serverSeq === 'number') {
-        seq = serverSeq;
-        if (isLeader) {
-          seq += 1;
-          socket.emit('timer-state', { seq, state: store.getState().timer });
-        }
-      }
+    socket.on('leadership-info', (payload: { isLeader: boolean; state?: AppState['timer'] }) => {
+      const { isLeader, state } = payload;
       store.dispatch(leaderActions.setLeader(isLeader));
-      if (!isLeader && pendingState) {
+      if (typeof state !== 'undefined') {
+        store.dispatch(timerActions.setState(state));
+        pendingState = null;
+      } else if (!isLeader && pendingState) {
         store.dispatch(timerActions.setState(pendingState));
         pendingState = null;
       }
+      if (isLeader && typeof state === 'undefined') {
+        seq += 1;
+        saveSeq();
+        socket.emit('timer-state', { seq, state: store.getState().timer });
+      }
+    });
+
+    socket.on('transfer-leadership', () => {
+      seq += 1;
+      saveSeq();
+      socket.emit('final-timer-state', { seq, state: store.getState().timer });
+      store.dispatch(leaderActions.setLeader(false));
     });
 
     socket.on('connect', () => {
       store.dispatch(connectionActions.setConnected(true));
-      socket.emit('verify-leader');
+      socket.emit('check-leadership');
     });
 
     socket.on('disconnect', () => {
@@ -74,8 +91,8 @@ export const createSocketMiddleware = (history: History): Middleware<{}, AppStat
     const state = store.getState();
 
     if (socket && socket.connected) {
-      if (leaderActions.requestLeader.match(action)) {
-        socket.emit('request-leader');
+      if (leaderActions.requestLeadership.match(action)) {
+        socket.emit('request-leadership', { seq });
       }
 
       if (
@@ -84,6 +101,7 @@ export const createSocketMiddleware = (history: History): Middleware<{}, AppStat
           && action.type !== timerActions.setState.type
       ) {
         seq += 1;
+        saveSeq();
         socket.emit('timer-state', { seq, state: state.timer });
       }
     }
