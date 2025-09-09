@@ -16,6 +16,7 @@ const timerSlice = createSlice({
   name: 'timer',
   initialState,
   reducers: {
+    setState: (_, action: PayloadAction<TimerState>) => action.payload,
     clearComplete: (state) => {
       state.contractions = state.contractions.filter((contraction) => contraction.duration === undefined);
 
@@ -62,6 +63,11 @@ const timerSlice = createSlice({
           });
         }
       },
+    },
+    deleteContraction: (state, action: PayloadAction<number>) => {
+      state.contractions = state.contractions.filter(
+        (contraction) => contraction.start !== action.payload
+      );
     },
   },
 });

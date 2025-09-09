@@ -6,6 +6,7 @@ describe('Modal reducer', () => {
     it('clears the active modal', () => {
       const state: ModalState = {
         active: ModalType.ClearHistory,
+        contractionStart: 123,
       };
 
       const newState: ModalState = {};
@@ -18,14 +19,15 @@ describe('Modal reducer', () => {
   });
 
   describe('open action', () => {
-    it('sets the active modal', () => {
+    it('sets the active modal and metadata', () => {
       const state: ModalState = {};
 
       const newState: ModalState = {
-        active: ModalType.ClearHistory,
+        active: ModalType.DeleteContraction,
+        contractionStart: 123,
       };
 
-      const action = modalActions.open(ModalType.ClearHistory);
+      const action = modalActions.open(ModalType.DeleteContraction, 123);
       const result = modalReducer(state, action);
 
       expect(result).toEqual(newState);

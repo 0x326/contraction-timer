@@ -16,14 +16,16 @@ export const breakpoint = (name: keyof Theme['breakpoint'], styles: any) => ({ t
 
 export const color = (name: keyof Theme['color']) => ({ theme }: { theme: Theme }) => theme.color[name];
 
-export const statusColor = ({ theme, status }: { theme: Theme, status: Status }) => {
+export const statusColor = (
+  { theme, status, offline }: { theme: Theme, status: Status, offline?: boolean }
+) => {
   switch (status) {
     case Status.Contraction:
-      return theme.color.contraction;
+      return offline ? theme.color.contractionOffline : theme.color.contraction;
     case Status.Rest:
-      return theme.color.rest;
+      return offline ? theme.color.restOffline : theme.color.rest;
     default:
-      return theme.color.ready;
+      return offline ? theme.color.readyOffline : theme.color.ready;
   }
 };
 

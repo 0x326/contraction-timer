@@ -1,9 +1,9 @@
-import { fireEvent, render, screen, startFakeTimer, within } from './utils/test.utils';
+import { cleanup, fireEvent, render, screen, startFakeTimer, within } from './utils/test.utils';
 import { App } from '../components/app/app.component';
 import React from 'react';
 
 const noop = () => {};
-const localStorageKey = 'redux';
+const localStorageKey = 'redux:test';
 const localStorageData = JSON.stringify({
   timer: {
     running: true,
@@ -22,6 +22,11 @@ describe('App tests', () => {
     expect(screen.getByRole('navigation')).toBeInTheDocument();
   });
 
+  test('prompts to join a lobby when none specified', () => {
+    render(<App />, '/');
+    expect(screen.getByRole('dialog', { name: /join a lobby/i })).toBeInTheDocument();
+  });
+
   test('displays the correct background colour for the current status', () => {
     render(<App />);
 
@@ -34,6 +39,14 @@ describe('App tests', () => {
 
     fireEvent.click(screen.getByRole('button', { name: /stop/i }));
     expect(layout).toHaveStyle('background-color: #107cb1');
+  });
+
+  test('dims the background when a non-leader is disconnected', () => {
+    render(<App />, '/test/recorder', false, false, false);
+
+    const layout = screen.getByTestId('layout');
+
+    expect(layout).toHaveStyle('background-color: #217e70');
   });
 
   test('applies focus styles when hitting tab and removes them when using a mouse', () => {
@@ -59,36 +72,33 @@ describe('App tests', () => {
 
     expect(screen.getByRole('heading', { name: /timer/i })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /history/i })).not.toBeInTheDocument();
-    expect(screen.getByLabelText(/phase time/i)).toBeInTheDocument();
   });
 
   test('displays the timer view for an unrecognised URI', () => {
-    render(<App />, '/foobar');
+    render(<App />, '/test/recorder/foobar');
 
     expect(screen.getByRole('heading', { name: /timer/i })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /history/i })).not.toBeInTheDocument();
-    expect(screen.getByLabelText(/phase time/i)).toBeInTheDocument();
   });
 
   test('navigates between views', () => {
     render(<App />);
 
-    const timerLink = screen.getByRole('link', { name: /timer/i });
     const historyLink = screen.getByRole('link', { name: /history/i });
 
     fireEvent.click(historyLink);
 
     expect(screen.getByRole('heading', { name: /history/i })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /timer/i })).not.toBeInTheDocument();
-    expect(historyLink).toHaveAttribute('aria-current', 'page');
-    expect(timerLink).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('link', { name: /history/i })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: /timer/i })).not.toHaveAttribute('aria-current');
 
-    fireEvent.click(timerLink);
+    fireEvent.click(screen.getByRole('link', { name: /timer/i }));
 
     expect(screen.getByRole('heading', { name: /timer/i })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: /history/i })).not.toBeInTheDocument();
-    expect(timerLink).toHaveAttribute('aria-current', 'page');
-    expect(historyLink).not.toHaveAttribute('aria-current');
+    expect(screen.getByRole('link', { name: /timer/i })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: /history/i })).not.toHaveAttribute('aria-current');
   });
 
   test('displays the phase time and status', () => {
@@ -185,6 +195,22 @@ describe('App tests', () => {
     expect(screen.queryByRole('button', { name: /stop/i })).not.toBeInTheDocument();
     expect(pause).toBeInTheDocument();
     expect(pause).toHaveAttribute('disabled');
+  });
+
+  test('disables timer controls when not the leader', () => {
+    render(<App />, '/test/recorder', false, false);
+
+    expect(screen.getByRole('button', { name: /start/i })).toHaveAttribute('disabled');
+    expect(screen.getByRole('button', { name: /take a break/i })).toHaveAttribute('disabled');
+  });
+
+  test('shows leader button only for recorder role', () => {
+    render(<App />, '/test/recorder', false, false);
+    expect(screen.getByRole('button', { name: /become leader/i })).toBeInTheDocument();
+    cleanup();
+
+    render(<App />, '/test/monitor', false, false);
+    expect(screen.queryByRole('button', { name: /become leader/i })).not.toBeInTheDocument();
   });
 
   test('displays empty history when there are no completed contractions', () => {
@@ -319,5 +345,21 @@ describe('App tests', () => {
     expect(historyItems).toHaveLength(1);
     expect(historyItems[0]).toHaveTextContent('0:01');
     expect(historyItems[0]).toHaveTextContent('12:34pm, today');
+  });
+
+  test('allows a contraction to be deleted individually', () => {
+    const advanceTime = startFakeTimer();
+
+    render(<App />);
+
+    fireEvent.click(screen.getByRole('button', { name: /start/i }));
+    advanceTime(1000);
+    fireEvent.click(screen.getByRole('button', { name: /stop/i }));
+
+    fireEvent.click(screen.getByRole('link', { name: /history/i }));
+    fireEvent.click(screen.getByRole('button', { name: /delete/i }));
+    fireEvent.click(screen.getByRole('button', { name: /confirm/i }));
+
+    expect(screen.getByText(/your completed contractions will appear here/i)).toBeInTheDocument();
   });
 });

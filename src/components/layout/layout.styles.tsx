@@ -4,6 +4,7 @@ import styled from 'styled-components';
 
 interface LayoutProps {
   status: Status;
+  offline: boolean;
 }
 
 export const StyledLayout = styled.div<LayoutProps>`
@@ -11,7 +12,7 @@ export const StyledLayout = styled.div<LayoutProps>`
   flex-direction: column;
   height: 100%;
   transition: background-color ${transitionDuration('m')};
-  background-color: ${statusColor};
+  background-color: ${({ offline, status, theme }) => statusColor({ theme, status, offline })};
 `;
 
 export const StyledContent = styled.section`
