@@ -4,6 +4,7 @@ import cors from 'cors';
 import { Server } from 'socket.io';
 import { readState, writeState, PersistedState } from './persist';
 import type { TimerState } from '../src/store/timer/timer.slice';
+import logger from './logger';
 
 interface PendingTransfer {
   newSocketId: string;
@@ -39,7 +40,9 @@ const persist = () => {
       state: value.state,
     };
   });
-  writeState(obj);
+  void writeState(obj).catch((err) => {
+    logger.error({ err }, 'failed to persist state');
+  });
 };
 
 const start = async () => {
@@ -49,9 +52,11 @@ const start = async () => {
       readState(),
       new Promise<PersistedState>((resolve) => setTimeout(() => resolve({}), 5000)),
     ]);
-  } catch {
+  } catch (err) {
+    logger.error({ err }, 'failed to load persisted state');
     persisted = {};
   }
+  logger.info({ lobbies: Object.keys(persisted).length }, 'loaded persisted state');
   Object.entries(persisted).forEach(([lobby, data]) => {
     lobbies.set(lobby, {
       leaderSocketId: null,
@@ -73,6 +78,7 @@ const start = async () => {
       lobby?: string;
       clientId?: string;
     };
+    logger.info({ event: 'connection', lobby, clientId, socketId: socket.id }, 'socket connected');
     if (!lobbies.has(lobby)) {
       lobbies.set(lobby, {
         leaderSocketId: null,
@@ -105,6 +111,7 @@ const start = async () => {
 
     socket.on('check-leadership', () => {
       const isLeader = !!clientId && clientId === lobbyState.leaderClientId;
+      logger.debug({ event: 'check-leadership', lobby, clientId, socketId: socket.id, isLeader }, 'leadership checked');
       if (isLeader) {
         const sockets = lobbyState.clientSockets.get(clientId!) || new Set<string>();
         sockets.forEach((id) => {
@@ -118,6 +125,7 @@ const start = async () => {
     });
 
     socket.on('request-leadership', ({ seq }: { seq: number }) => {
+      logger.info({ event: 'request-leadership', lobby, clientId, seq, socketId: socket.id }, 'leadership requested');
       if (clientId === lobbyState.leaderClientId) {
         lobbyState.leaderSocketId = socket.id;
         lobbyState.lastSeq = seq;
@@ -142,6 +150,7 @@ const start = async () => {
         });
         if (lobbyState.leaderSocketId) {
           io.to(lobbyState.leaderSocketId).emit('transfer-leadership');
+          logger.info({ event: 'transfer-leadership', lobby, from: lobbyState.leaderClientId, to: clientId }, 'initiated leadership transfer');
         }
       } else {
         lobbyState.leaderSocketId = socket.id;
@@ -153,6 +162,7 @@ const start = async () => {
         };
         if (lobbyState.state) payload.state = lobbyState.state;
         socket.emit('leadership-info', payload);
+        logger.info({ event: 'leadership-granted', lobby, clientId, seq: lobbyState.lastSeq }, 'leadership granted');
         persist();
       }
     });
@@ -173,6 +183,7 @@ const start = async () => {
       };
       if (lobbyState.state) payload.state = lobbyState.state;
       io.to(newSocketId).emit('leadership-info', payload);
+      logger.info({ event: 'leadership-granted', lobby, clientId: newClientId, seq: lobbyState.lastSeq }, 'leadership granted');
       if (lobbyState.state) {
         io.to(lobby).except(newSocketId).except(oldSocketId ?? '').emit('timer-state', lobbyState.state);
       }
@@ -182,6 +193,7 @@ const start = async () => {
 
     socket.on('final-timer-state', (payload: { seq: number; state: TimerState }) => {
       if (socket.id !== lobbyState.leaderSocketId) return;
+      logger.info({ event: 'final-timer-state', lobby, clientId, seq: payload.seq }, 'received final state');
       finalizeTransfer(payload);
     });
 
@@ -190,11 +202,13 @@ const start = async () => {
       if (payload.seq <= lobbyState.lastSeq) return;
       lobbyState.lastSeq = payload.seq;
       lobbyState.state = payload.state;
+      logger.debug({ event: 'timer-state', lobby, clientId, seq: payload.seq }, 'timer state received');
       socket.to(lobby).emit('timer-state', payload.state);
       persist();
     });
 
     socket.on('disconnect', () => {
+      logger.info({ event: 'disconnect', lobby, clientId, socketId: socket.id }, 'socket disconnected');
       if (socket.id === lobbyState.leaderSocketId) {
         lobbyState.leaderSocketId = null;
       }
@@ -217,8 +231,7 @@ const start = async () => {
 
   const PORT = process.env.PORT || 3001;
   server.listen(PORT, () => {
-    // eslint-disable-next-line no-console
-    console.log(`Socket server listening on ${PORT}`);
+    logger.info({ port: PORT }, 'Socket server listening');
   });
 };
 
