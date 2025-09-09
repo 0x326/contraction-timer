@@ -36,3 +36,13 @@ I've kept the interface as minimal as possible while still providing all the nec
 [stylelint](https://stylelint.io/),
 [Jest](https://jestjs.io/),
 [React Testing Library](https://testing-library.com/docs/react-testing-library/intro/).
+
+## Local testing with Docker Compose
+
+Run the client, server and Redis locally:
+
+```sh
+docker compose up
+```
+
+The app will be available at http://localhost:3000 and the Socket.IO server at http://localhost:3001.

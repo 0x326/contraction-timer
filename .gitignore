@@ -21,3 +21,7 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+# server persistence
+server/state.json
+server/state.json.tmp

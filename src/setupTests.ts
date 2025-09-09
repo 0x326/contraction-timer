@@ -3,3 +3,12 @@
 // expect(element).toHaveTextContent(/react/i)
 // learn more: https://github.com/testing-library/jest-dom
 import '@testing-library/jest-dom/extend-expect';
+
+jest.mock('socket.io-client', () => ({
+  io: () => ({
+    on: jest.fn(),
+    emit: jest.fn(),
+    disconnect: jest.fn(),
+    connected: true,
+  }),
+}), { virtual: true });

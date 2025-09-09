@@ -2,6 +2,15 @@ import { timerActions, timerReducer, TimerState } from './timer.slice';
 import { mockNow } from '../../test/utils/test.utils';
 
 describe('Timer reducer', () => {
+  describe('setState action', () => {
+    it('replaces the timer state', () => {
+      const state: TimerState = { running: false, contractions: [] };
+      const newState: TimerState = { running: true, contractions: [{ start: 1 }] };
+      const action = timerActions.setState(newState);
+      const result = timerReducer(state, action);
+      expect(result).toEqual(newState);
+    });
+  });
   describe('clearComplete action', () => {
     it('clears all completed contractions', () => {
       const state: TimerState = {
@@ -227,6 +236,30 @@ describe('Timer reducer', () => {
 
       mockNow(1000000020000);
       const action = timerActions.toggleContraction();
+      const result = timerReducer(state, action);
+
+      expect(result).toEqual(newState);
+    });
+  });
+
+  describe('deleteContraction action', () => {
+    it('removes a contraction by start time', () => {
+      const state: TimerState = {
+        running: false,
+        contractions: [
+          { start: 1, duration: 1000 },
+          { start: 2, duration: 2000 },
+        ],
+      };
+
+      const newState: TimerState = {
+        running: false,
+        contractions: [
+          { start: 2, duration: 2000 },
+        ],
+      };
+
+      const action = timerActions.deleteContraction(1);
       const result = timerReducer(state, action);
 
       expect(result).toEqual(newState);

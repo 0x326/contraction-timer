@@ -3,6 +3,7 @@ import { ModalType } from '../../models/modal-type.model';
 
 export interface ModalState {
   active?: ModalType;
+  contractionStart?: number;
 }
 
 const initialState: ModalState = {};
@@ -13,13 +14,15 @@ const modalSlice = createSlice({
   reducers: {
     close: (state) => {
       state.active = undefined;
+      state.contractionStart = undefined;
     },
     open: {
-      prepare: (modal: ModalType) => ({
-        payload: modal,
+      prepare: (modal: ModalType, contractionStart?: number) => ({
+        payload: { modal, contractionStart },
       }),
-      reducer: (state, action: PayloadAction<ModalType>) => {
-        state.active = action.payload;
+      reducer: (state, action: PayloadAction<{ modal: ModalType; contractionStart?: number }>) => {
+        state.active = action.payload.modal;
+        state.contractionStart = action.payload.contractionStart;
       },
     },
   },

@@ -7,17 +7,18 @@ import { timerActions } from '../../store/timer/timer.slice';
 import { useDispatch, useSelector } from 'react-redux';
 import { AppState } from '../../store/root.reducer';
 
-export const ClearHistoryModal: React.FC = () => {
+export const DeleteContractionModal: React.FC = () => {
   const dispatch = useDispatch();
   const isLeader = useSelector((state: AppState) => state.leader.isLeader);
+  const start = useSelector((state: AppState) => state.modal.contractionStart);
 
   const closeModal = () => {
     dispatch(modalActions.close());
   };
 
   const handleConfirmClick = () => {
-    if (isLeader) {
-      dispatch(timerActions.clearComplete());
+    if (isLeader && typeof start === 'number') {
+      dispatch(timerActions.deleteContraction(start));
     }
     closeModal();
   };
@@ -28,7 +29,7 @@ export const ClearHistoryModal: React.FC = () => {
 
   return (
     <Modal
-      heading="Clear history"
+      heading="Delete contraction"
       primaryButtonText="Confirm"
       primaryButtonOnClick={handleConfirmClick}
       primaryButtonDisabled={!isLeader}
@@ -36,7 +37,7 @@ export const ClearHistoryModal: React.FC = () => {
       secondaryButtonOnClick={handleCancelClick}
     >
       <Copy>
-        <p>Are you sure you want to clear your contraction history?</p>
+        <p>Are you sure you want to delete this contraction?</p>
       </Copy>
     </Modal>
   );

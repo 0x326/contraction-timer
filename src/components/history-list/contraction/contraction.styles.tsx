@@ -30,3 +30,17 @@ export const StyledDuration = styled.div`
 export const StyledDate = styled.div`
   font-size: ${fontSize('s')};
 `;
+
+export const StyledDeleteButton = styled.button`
+  margin-left: ${spacing('s')};
+  padding: 0;
+  border: 0;
+  background: none;
+  color: ${color('neutralMin')};
+  cursor: pointer;
+
+  &:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+  }
+`;
