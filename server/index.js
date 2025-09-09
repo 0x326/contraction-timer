@@ -9,19 +9,6 @@ const io = new Server(server, { cors: { origin: '*' } });
 
 const lobbies = new Map();
 
-// Load persisted lobby state
-const persisted = readState();
-Object.entries(persisted).forEach(([lobby, data]) => {
-  lobbies.set(lobby, {
-    leaderSocketId: null,
-    leaderClientId: data.leaderClientId || null,
-    lastSeq: data.lastSeq || 0,
-    state: data.state || null,
-    clientSockets: new Map(),
-    pending: null,
-  });
-});
-
 const persist = () => {
   const obj = {};
   lobbies.forEach((value, key) => {
@@ -33,6 +20,19 @@ const persist = () => {
   });
   writeState(obj);
 };
+
+const start = async () => {
+  const persisted = await readState();
+  Object.entries(persisted).forEach(([lobby, data]) => {
+    lobbies.set(lobby, {
+      leaderSocketId: null,
+      leaderClientId: data.leaderClientId || null,
+      lastSeq: data.lastSeq || 0,
+      state: data.state || null,
+      clientSockets: new Map(),
+      pending: null,
+    });
+  });
 
 io.on('connection', (socket) => {
   const { lobby = 'default', clientId = null } = socket.handshake.query;
@@ -167,4 +167,7 @@ server.listen(PORT, () => {
   // eslint-disable-next-line no-console
   console.log(`Socket server listening on ${PORT}`);
 });
+};
+
+start();
 
