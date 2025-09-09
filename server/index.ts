@@ -22,6 +22,7 @@ interface LobbyState {
   clientSockets: Map<string, Set<string>>;
   pending: PendingTransfer | null;
   sockets: Set<string>;
+  timeout: NodeJS.Timeout | null;
 }
 
 const app = express();
@@ -66,6 +67,7 @@ const start = async () => {
       clientSockets: new Map(),
       pending: null,
       sockets: new Set(),
+      timeout: null,
     });
   });
 
@@ -88,11 +90,17 @@ const start = async () => {
         clientSockets: new Map(),
         pending: null,
         sockets: new Set(),
+        timeout: null,
       });
       persist();
     }
     socket.join(lobby);
     const lobbyState = lobbies.get(lobby)!;
+
+    if (lobbyState.timeout) {
+      clearTimeout(lobbyState.timeout);
+      lobbyState.timeout = null;
+    }
 
     lobbyState.sockets.add(socket.id);
 
@@ -223,7 +231,10 @@ const start = async () => {
       }
       lobbyState.sockets.delete(socket.id);
       if (lobbyState.sockets.size === 0) {
-        lobbies.delete(lobby);
+        lobbyState.timeout = setTimeout(() => {
+          lobbies.delete(lobby);
+          persist();
+        }, 24 * 60 * 60 * 1000);
         persist();
       }
     });

@@ -11,6 +11,7 @@ export const createSocketMiddleware = (history: History): Middleware<{}, AppStat
   let seq = 0;
   let pendingState: AppState['timer'] | null = null;
   let socket: Socket | null = null;
+  let leadershipTimeout: ReturnType<typeof setTimeout> | null = null;
 
   const getLobbyFromPath = (path: string) => path.split('/').filter(Boolean)[0];
 
@@ -42,6 +43,10 @@ export const createSocketMiddleware = (history: History): Middleware<{}, AppStat
     });
 
     socket.on('leadership-info', (payload: { isLeader: boolean; state?: AppState['timer']; seq?: number }) => {
+      if (leadershipTimeout) {
+        clearTimeout(leadershipTimeout);
+        leadershipTimeout = null;
+      }
       const { isLeader, state, seq: serverSeq } = payload;
       if (typeof serverSeq === 'number') {
         seq = serverSeq;
@@ -97,6 +102,17 @@ export const createSocketMiddleware = (history: History): Middleware<{}, AppStat
     if (socket && socket.connected) {
       if (leaderActions.requestLeadership.match(action)) {
         socket.emit('request-leadership', { seq });
+        if (leadershipTimeout) clearTimeout(leadershipTimeout);
+        leadershipTimeout = setTimeout(() => {
+          if (!store.getState().leader.isLeader) {
+            store.dispatch(leaderActions.setLeader(true));
+            if (pendingState) {
+              store.dispatch(timerActions.setState(pendingState));
+              pendingState = null;
+            }
+          }
+          leadershipTimeout = null;
+        }, 1000);
       }
 
       if (
