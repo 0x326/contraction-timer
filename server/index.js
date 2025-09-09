@@ -73,14 +73,14 @@ io.on('connection', (socket) => {
       });
       lobbyState.leaderSocketId = socket.id;
     }
-    socket.emit('leadership-info', { isLeader });
+    socket.emit('leadership-info', { isLeader, seq: lobbyState.lastSeq });
   });
 
   socket.on('request-leadership', ({ seq }) => {
     if (clientId === lobbyState.leaderClientId) {
       lobbyState.leaderSocketId = socket.id;
       lobbyState.lastSeq = seq;
-      socket.emit('leadership-info', { isLeader: true });
+      socket.emit('leadership-info', { isLeader: true, seq: lobbyState.lastSeq });
       return;
     }
 
@@ -105,7 +105,7 @@ io.on('connection', (socket) => {
       lobbyState.leaderSocketId = socket.id;
       lobbyState.leaderClientId = clientId;
       lobbyState.lastSeq = seq;
-      const payload = { isLeader: true };
+      const payload = { isLeader: true, seq: lobbyState.lastSeq };
       if (lobbyState.state) payload.state = lobbyState.state;
       socket.emit('leadership-info', payload);
       persist();
@@ -122,7 +122,7 @@ io.on('connection', (socket) => {
     lobbyState.leaderSocketId = newSocketId;
     lobbyState.leaderClientId = newClientId;
     lobbyState.lastSeq = newSeq;
-    const payload = { isLeader: true };
+    const payload = { isLeader: true, seq: lobbyState.lastSeq };
     if (lobbyState.state) payload.state = lobbyState.state;
     io.to(newSocketId).emit('leadership-info', payload);
     if (lobbyState.state) {

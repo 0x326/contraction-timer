@@ -26,22 +26,10 @@ export const createSocketMiddleware = (history: History): Middleware<{}, AppStat
     }
     return id;
   };
-
-  if (typeof localStorage !== 'undefined') {
-    const saved = localStorage.getItem('seq');
-    if (saved) seq = Number(saved) || 0;
-  }
-
   const clientId = getClientId();
   const socket: Socket | null = typeof window !== 'undefined' && process.env.NODE_ENV !== 'test'
     ? io('http://localhost:3001', { query: { lobby, clientId } })
     : null;
-
-  const saveSeq = () => {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.setItem('seq', String(seq));
-    }
-  };
 
   if (socket) {
     socket.on('timer-state', (timerState) => {
@@ -52,8 +40,11 @@ export const createSocketMiddleware = (history: History): Middleware<{}, AppStat
       }
     });
 
-    socket.on('leadership-info', (payload: { isLeader: boolean; state?: AppState['timer'] }) => {
-      const { isLeader, state } = payload;
+    socket.on('leadership-info', (payload: { isLeader: boolean; state?: AppState['timer']; seq?: number }) => {
+      const { isLeader, state, seq: serverSeq } = payload;
+      if (typeof serverSeq === 'number') {
+        seq = serverSeq;
+      }
       store.dispatch(leaderActions.setLeader(isLeader));
       if (typeof state !== 'undefined') {
         store.dispatch(timerActions.setState(state));
@@ -64,14 +55,12 @@ export const createSocketMiddleware = (history: History): Middleware<{}, AppStat
       }
       if (isLeader && typeof state === 'undefined') {
         seq += 1;
-        saveSeq();
         socket.emit('timer-state', { seq, state: store.getState().timer });
       }
     });
 
     socket.on('transfer-leadership', () => {
       seq += 1;
-      saveSeq();
       socket.emit('final-timer-state', { seq, state: store.getState().timer });
       store.dispatch(leaderActions.setLeader(false));
     });
@@ -101,7 +90,6 @@ export const createSocketMiddleware = (history: History): Middleware<{}, AppStat
           && action.type !== timerActions.setState.type
       ) {
         seq += 1;
-        saveSeq();
         socket.emit('timer-state', { seq, state: state.timer });
       }
     }
