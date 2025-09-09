@@ -20,8 +20,11 @@ const theme = {
   },
   color: {
     contraction: 'colorContraction',
+    contractionOffline: 'colorContractionOffline',
     ready: 'colorReady',
+    readyOffline: 'colorReadyOffline',
     rest: 'colorRest',
+    restOffline: 'colorRestOffline',
   },
   font: {
     size: {
@@ -92,6 +95,12 @@ describe('Theme helpers', () => {
       expect(statusColor({ theme, status: Status.Contraction })).toEqual('colorContraction');
       expect(statusColor({ theme, status: Status.Ready })).toEqual('colorReady');
       expect(statusColor({ theme, status: Status.Rest })).toEqual('colorRest');
+    });
+
+    it('returns the offline color when offline is true', () => {
+      expect(statusColor({ theme, status: Status.Contraction, offline: true })).toEqual('colorContractionOffline');
+      expect(statusColor({ theme, status: Status.Ready, offline: true })).toEqual('colorReadyOffline');
+      expect(statusColor({ theme, status: Status.Rest, offline: true })).toEqual('colorRestOffline');
     });
   });
 
