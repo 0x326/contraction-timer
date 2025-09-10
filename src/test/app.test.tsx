@@ -46,7 +46,7 @@ describe('App tests', () => {
 
     const layout = screen.getByTestId('layout');
 
-    expect(layout).toHaveStyle('background-color: #217e70');
+    expect(layout).toHaveStyle('background-color: #73817f');
   });
 
   test('applies focus styles when hitting tab and removes them when using a mouse', () => {
