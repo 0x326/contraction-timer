@@ -31,6 +31,7 @@ const server = http.createServer(app);
 const io = new Server(server, { cors: { origin: '*' } });
 
 const lobbies = new Map<string, LobbyState>();
+const LEADERSHIP_TRANSFER_TIMEOUT_MS = 5000;
 
 const persist = () => {
   const obj: PersistedState = {};
@@ -157,7 +158,7 @@ const start = async () => {
           oldSocketId: lobbyState.leaderSocketId,
           timeout: setTimeout(() => {
             finalizeTransfer(null);
-          }, 500),
+          }, LEADERSHIP_TRANSFER_TIMEOUT_MS),
         };
         oldSockets.forEach((id) => {
           io.to(id).emit('leadership-info', { isLeader: false });

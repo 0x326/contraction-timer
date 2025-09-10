@@ -30,7 +30,7 @@ test('timer state survives leader disconnect', async ({ browser }) => {
   await page3.goto(`http://localhost:3000/#/${lobby}/recorder`);
 
   await page2.click('text=Become leader');
-  await expect(page2.locator('text=Leader')).toBeVisible();
+  await expect(page2.locator('text=Leader')).toBeVisible({ timeout: 15000 });
 
   await page2.click('button[aria-label="Stop"]');
 

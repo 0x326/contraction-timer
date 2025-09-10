@@ -14,6 +14,7 @@ export const createSocketMiddleware = (history: History): Middleware<{}, AppStat
   let socket: Socket | null = null;
   let leadershipTimeout: ReturnType<typeof setTimeout> | null = null;
   let timeSyncInterval: ReturnType<typeof setInterval> | null = null;
+  const LEADERSHIP_TIMEOUT_MS = 5000;
 
   const getLobbyFromPath = (path: string) => path.split('/').filter(Boolean)[0];
 
@@ -117,30 +118,32 @@ export const createSocketMiddleware = (history: History): Middleware<{}, AppStat
     const result = next(action);
     const state = store.getState();
 
-    if (socket && socket.connected) {
-      if (leaderActions.requestLeadership.match(action)) {
+    if (leaderActions.requestLeadership.match(action)) {
+      if (socket && socket.connected) {
         socket.emit('request-leadership', { seq });
-        if (leadershipTimeout) clearTimeout(leadershipTimeout);
-        leadershipTimeout = setTimeout(() => {
-          if (!store.getState().leader.isLeader) {
-            store.dispatch(leaderActions.setLeader(true));
-            if (pendingState) {
-              store.dispatch(timerActions.setState(pendingState));
-              pendingState = null;
-            }
+      }
+      if (leadershipTimeout) clearTimeout(leadershipTimeout);
+      leadershipTimeout = setTimeout(() => {
+        if (!store.getState().leader.isLeader) {
+          store.dispatch(leaderActions.setLeader(true));
+          if (pendingState) {
+            store.dispatch(timerActions.setState(pendingState));
+            pendingState = null;
           }
-          leadershipTimeout = null;
-        }, 1000);
-      }
+        }
+        leadershipTimeout = null;
+      }, LEADERSHIP_TIMEOUT_MS);
+    }
 
-      if (
-        state.leader.isLeader
-          && action.type.startsWith('timer/')
-          && action.type !== timerActions.setState.type
-      ) {
-        seq += 1;
-        socket.emit('timer-state', { seq, state: state.timer });
-      }
+    if (
+      socket
+        && socket.connected
+        && state.leader.isLeader
+        && action.type.startsWith('timer/')
+        && action.type !== timerActions.setState.type
+    ) {
+      seq += 1;
+      socket.emit('timer-state', { seq, state: state.timer });
     }
 
     return result;
