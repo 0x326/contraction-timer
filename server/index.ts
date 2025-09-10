@@ -117,6 +117,12 @@ const start = async () => {
       socket.emit('timer-state', lobbyState.state);
     }
 
+    socket.on('sync-time', (cb: (serverTime: number) => void) => {
+      const isLeader = !!clientId && clientId === lobbyState.leaderClientId;
+      logger.debug({ event: 'sync-time', lobby, clientId, socketId: socket.id, isLeader });
+      cb(Date.now());
+    });
+
     socket.on('check-leadership', () => {
       const isLeader = !!clientId && clientId === lobbyState.leaderClientId;
       logger.debug({ event: 'check-leadership', lobby, clientId, socketId: socket.id, isLeader }, 'leadership checked');

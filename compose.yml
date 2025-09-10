@@ -1,33 +1,37 @@
 version: '3.8'
 services:
   redis:
-    image: redis:7-alpine
-    ports:
-      - '6379:6379'
+    image: redis:8-alpine
+    expose:
+      - '6379'
     volumes:
       - redis-data:/data
   server:
-    image: node:18
+    image: node:22
     working_dir: /app
+    user: "${UID}:${GID}"
     command: "npx ts-node --compiler-options '{\"module\":\"commonjs\"}' server/index.ts"
     volumes:
       - .:/app
     environment:
-      - REDIS_URL=redis://redis:6379
+      REDIS_URL: 'redis://redis:6379'
+      LOG_LEVEL: '${LOG_LEVEL}'
     ports:
       - '3001:3001'
     depends_on:
       - redis
   client:
-    image: node:18
+    image: node:22
     working_dir: /app
+    user: "${UID}:${GID}"
     command: npm start
     volumes:
       - .:/app
     ports:
       - '3000:3000'
     environment:
-      - CI=true
+      CI: 'true'
+      NODE_OPTIONS: '--openssl-legacy-provider'
     depends_on:
       - server
 volumes:

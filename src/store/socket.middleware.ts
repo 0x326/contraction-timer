@@ -6,12 +6,14 @@ import { connectionActions } from './connection/connection.slice';
 import { leaderActions } from './leader/leader.slice';
 import { AppState } from './root.reducer';
 import { timerActions } from './timer/timer.slice';
+import { setServerTimeOffset } from '../utils/now.util';
 
 export const createSocketMiddleware = (history: History): Middleware<{}, AppState> => (store) => {
   let seq = 0;
   let pendingState: AppState['timer'] | null = null;
   let socket: Socket | null = null;
   let leadershipTimeout: ReturnType<typeof setTimeout> | null = null;
+  let timeSyncInterval: ReturnType<typeof setInterval> | null = null;
 
   const getLobbyFromPath = (path: string) => path.split('/').filter(Boolean)[0];
 
@@ -33,6 +35,15 @@ export const createSocketMiddleware = (history: History): Middleware<{}, AppStat
   const connect = (lobby: string) => {
     if (socket || !lobby || typeof window === 'undefined' || process.env.NODE_ENV === 'test') return;
     socket = io('http://localhost:3001', { query: { lobby, clientId } });
+
+    const syncTime = () => {
+      const start = Date.now();
+      socket!.emit('sync-time', (serverTime: number) => {
+        const end = Date.now();
+        const offset = serverTime - (start + (end - start) / 2);
+        setServerTimeOffset(offset);
+      });
+    };
 
     socket.on('timer-state', (timerState) => {
       pendingState = timerState;
@@ -73,11 +84,18 @@ export const createSocketMiddleware = (history: History): Middleware<{}, AppStat
 
     socket.on('connect', () => {
       store.dispatch(connectionActions.setConnected(true));
+      syncTime();
+      if (timeSyncInterval) clearInterval(timeSyncInterval);
+      timeSyncInterval = setInterval(syncTime, 60 * 1000);
       socket.emit('check-leadership');
     });
 
     socket.on('disconnect', () => {
       store.dispatch(connectionActions.setConnected(false));
+      if (timeSyncInterval) {
+        clearInterval(timeSyncInterval);
+        timeSyncInterval = null;
+      }
     });
   };
 
