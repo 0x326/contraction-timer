@@ -10,9 +10,13 @@ import { createStore } from '../../store/app.store';
 import { connectionActions } from '../../store/connection/connection.slice';
 import { leaderActions } from '../../store/leader/leader.slice';
 import { appTheme } from '../../theme/app.theme';
+import { setServerTimeOffset } from '../../utils/now.util';
 
 export * from '@testing-library/react';
-export const mockNow = (timestamp: number) => jest.spyOn(Date, 'now').mockReturnValue(timestamp);
+export const mockNow = (timestamp: number) => {
+  setServerTimeOffset(0);
+  return jest.spyOn(Date, 'now').mockReturnValue(timestamp);
+};
 
 export const startFakeTimer = () => {
   let time = moment('2020-01-01T12:34:59').valueOf();
