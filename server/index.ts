@@ -118,6 +118,8 @@ const start = async () => {
     }
 
     socket.on('sync-time', (cb: (serverTime: number) => void) => {
+      const isLeader = !!clientId && clientId === lobbyState.leaderClientId;
+      logger.debug({ event: 'sync-time', lobby, clientId, socketId: socket.id, isLeader });
       cb(Date.now());
     });
 
