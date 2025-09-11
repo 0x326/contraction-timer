@@ -34,7 +34,7 @@ export const createSocketMiddleware = (history: History): Middleware<{}, AppStat
 
   const connect = (lobby: string) => {
     if (socket || !lobby || typeof window === 'undefined' || process.env.NODE_ENV === 'test') return;
-    socket = io('http://localhost:3001', { query: { lobby, clientId } });
+    socket = io('http://192.168.0.62:3001', { query: { lobby, clientId } });
 
     const syncTime = () => {
       const start = Date.now();
