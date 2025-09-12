@@ -49,6 +49,14 @@ describe('App tests', () => {
     expect(layout).toHaveStyle('background-color: #217e70');
   });
 
+  test('dims the background when the leader is disconnected', () => {
+    render(<App />, '/test/recorder', false, true, false);
+
+    const layout = screen.getByTestId('layout');
+
+    expect(layout).toHaveStyle('background-color: #217e70');
+  });
+
   test('applies focus styles when hitting tab and removes them when using a mouse', () => {
     const { baseElement } = render(<App />);
 
