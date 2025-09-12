@@ -10,11 +10,10 @@ import { AppState } from '../../store/root.reducer';
 
 export const Layout: React.FC = () => {
   const status = useSelector(timerSelectors.getStatus);
-  const isLeader = useSelector((state: AppState) => state.leader.isLeader);
   const connected = useSelector((state: AppState) => state.connection.connected);
 
   return (
-    <StyledLayout status={status} offline={!connected && !isLeader} data-testid="layout">
+    <StyledLayout status={status} offline={!connected} data-testid="layout">
       <section>
         <Header />
       </section>
