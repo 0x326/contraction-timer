@@ -32,15 +32,19 @@ export const startFakeTimer = () => {
   return advanceTime;
 };
 
-export const render = (ui: React.ReactElement, path = '/test/recorder', persistState = false, isLeader = true, isConnected = true) => {
+export const render = (
+  ui: React.ReactElement,
+  path = '/test/recorder',
+  persistState = false,
+  isLeader = true,
+  isConnected = true
+) => {
   const history = createMemoryHistory({ initialEntries: [path] });
   const store = createStore(history, persistState);
   if (isLeader) {
     store.dispatch(leaderActions.setLeader(true));
   }
-  if (!isConnected) {
-    store.dispatch(connectionActions.setConnected(false));
-  }
+  store.dispatch(connectionActions.setConnected(isConnected));
 
   const Wrapper: React.FC = ({ children }) => (
     <Router history={history}>
