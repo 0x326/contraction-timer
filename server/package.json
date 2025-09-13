@@ -1,0 +1,30 @@
+{
+  "name": "contraction-timer-api",
+  "version": "1.0.0",
+  "description": "",
+  "source": "index.ts",
+  "main": "dist/main.js",
+  "module": "dist/module.js",
+  "scripts": {
+    "watch": "parcel watch",
+    "build": "parcel build",
+    "tsc": "tsc"
+  },
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^5.1.0",
+    "ioredis": "^5.7.0",
+    "pino": "^9.9.5",
+    "socket.io": "^4.8.1"
+  },
+  "devDependencies": {
+    "@parcel/packager-ts": "^2.15.4",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.3",
+    "@types/node": "^22.18.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.2"
+  }
+}
