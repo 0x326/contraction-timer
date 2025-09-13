@@ -1,0 +1,29 @@
+name: Deploy Redis
+
+on:
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      CLUSTER_ID: ${{ secrets.REDIS_CLUSTER_ID }}
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Ensure Redis cluster
+        run: |
+          if aws elasticache describe-cache-clusters --cache-cluster-id $CLUSTER_ID --show-cache-node-info >/dev/null 2>&1; then
+            echo "Redis cluster $CLUSTER_ID already exists"
+          else
+            aws elasticache create-cache-cluster --cache-cluster-id $CLUSTER_ID \
+              --engine redis --cache-node-type cache.t3.micro --num-cache-nodes 1
+          fi
+      - name: Output primary endpoint
+        id: redis
+        run: |
+          ENDPOINT=$(aws elasticache describe-cache-clusters --cache-cluster-id $CLUSTER_ID --show-cache-node-info --query 'CacheClusters[0].CacheNodes[0].Endpoint.Address' --output text)
+          echo "endpoint=$ENDPOINT" >> $GITHUB_OUTPUT
