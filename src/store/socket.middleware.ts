@@ -8,67 +8,59 @@ import { AppState } from './root.reducer';
 import { timerActions } from './timer/timer.slice';
 import { setServerTimeOffset } from '../utils/now.util';
 
-export const createSocketMiddleware = (history: History): Middleware<{}, AppState> => (store) => {
-  let seq = 0;
-  let pendingState: AppState['timer'] | null = null;
-  let socket: Socket | null = null;
-  let leadershipTimeout: ReturnType<typeof setTimeout> | null = null;
-  let timeSyncInterval: ReturnType<typeof setInterval> | null = null;
+const getClientId = () => {
+  let id = typeof localStorage !== 'undefined' ? localStorage.getItem('clientId') : undefined;
+  if (!id) {
+    if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+      id = crypto.randomUUID();
+    } else {
+      id = `${Date.now()}-${Math.random()}`;
+    }
 
-  const getLobbyFromPath = (path: string) => path.split('/').filter(Boolean)[0];
-
-  const getClientId = () => {
-    if (typeof localStorage === 'undefined') return '';
-    let id = localStorage.getItem('clientId');
-    if (!id) {
-      if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-        id = (crypto as any).randomUUID();
-      } else {
-        id = `${Date.now()}-${Math.random()}`;
-      }
+    if (typeof localStorage !== 'undefined') {
       localStorage.setItem('clientId', id);
     }
-    return id;
-  };
-  const clientId = getClientId();
+  }
+  return id;
+};
 
-  const connect = (lobby: string) => {
-    if (socket || !lobby || typeof window === 'undefined' || process.env.NODE_ENV === 'test') return;
+const clientId = getClientId();
+
+
+export const createSocketMiddleware = (history: History): Middleware<{}, AppState> => (store) => {
+  let seq = 0;
+  let pendingStateFromServer: AppState['timer'] | null = null;
+  let socket: Socket | null = null;
+  let requestLeadershipTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  let timeSyncIntervalId: ReturnType<typeof setInterval> | null = null;
+
+  const getLobbyFromPath = (path: string): string | null => path.split('/').filter(Boolean)[0] || null;
+
+  const connect = (lobby: string | null) => {
+    if (socket || process.env.NODE_ENV === 'test') return;
     socket = io('http://192.168.0.62:3001', { query: { lobby, clientId } });
 
-    const syncTime = () => {
-      const start = Date.now();
-      socket!.emit('sync-time', (serverTime: number) => {
-        const end = Date.now();
-        const offset = serverTime - (start + (end - start) / 2);
-        setServerTimeOffset(offset);
-      });
-    };
-
     socket.on('timer-state', (timerState) => {
-      pendingState = timerState;
+      pendingStateFromServer = timerState;
       if (!store.getState().leader.isLeader) {
         store.dispatch(timerActions.setState(timerState));
-        pendingState = null;
+        pendingStateFromServer = null;
       }
     });
 
     socket.on('leadership-info', (payload: { isLeader: boolean; state?: AppState['timer']; seq?: number }) => {
-      if (leadershipTimeout) {
-        clearTimeout(leadershipTimeout);
-        leadershipTimeout = null;
+      if (requestLeadershipTimeoutId) {
+        clearTimeout(requestLeadershipTimeoutId);
+        requestLeadershipTimeoutId = null;
       }
       const { isLeader, state, seq: serverSeq } = payload;
-      if (typeof serverSeq === 'number') {
-        seq = serverSeq;
-      }
       store.dispatch(leaderActions.setLeader(isLeader));
       if (typeof state !== 'undefined') {
         store.dispatch(timerActions.setState(state));
-        pendingState = null;
-      } else if (!isLeader && pendingState) {
-        store.dispatch(timerActions.setState(pendingState));
-        pendingState = null;
+        pendingStateFromServer = null;
+      } else if (!isLeader && pendingStateFromServer) {
+        store.dispatch(timerActions.setState(pendingStateFromServer));
+        pendingStateFromServer = null;
       }
       if (isLeader && typeof state === 'undefined') {
         seq += 1;
@@ -82,35 +74,46 @@ export const createSocketMiddleware = (history: History): Middleware<{}, AppStat
       store.dispatch(leaderActions.setLeader(false));
     });
 
+    const syncTime = () => {
+      const start = Date.now();
+      socket!.emit('sync-time', (serverTime: number) => {
+        const end = Date.now();
+        const offset = serverTime - (start + (end - start) / 2);
+        setServerTimeOffset(offset);
+      });
+    };
+
     socket.on('connect', () => {
       store.dispatch(connectionActions.setConnected(true));
       syncTime();
-      if (timeSyncInterval) clearInterval(timeSyncInterval);
-      timeSyncInterval = setInterval(syncTime, 60 * 1000);
+      if (timeSyncIntervalId) clearInterval(timeSyncIntervalId);
+      timeSyncIntervalId = setInterval(syncTime, 60 * 1000);
       socket.emit('check-leadership');
     });
 
     socket.on('disconnect', () => {
       store.dispatch(connectionActions.setConnected(false));
-      if (timeSyncInterval) {
-        clearInterval(timeSyncInterval);
-        timeSyncInterval = null;
+      if (timeSyncIntervalId) {
+        clearInterval(timeSyncIntervalId);
+        timeSyncIntervalId = null;
       }
     });
   };
 
-  const initialLobby = getLobbyFromPath(history.location.pathname);
-  if (initialLobby) {
-    connect(initialLobby);
-  }
+  const initialLobby = getLobbyFromPath(history.location.pathname) || 'default';
+  connect(initialLobby);
 
   history.listen((location) => {
-    if (!socket) {
-      const lobby = getLobbyFromPath(location.pathname);
+    if (socket) {
+      socket.disconnect();
+    }
+
+    setImmediate(() => {
+      const lobby = getLobbyFromPath(location.pathname) || 'default';
       if (lobby) {
         connect(lobby);
       }
-    }
+    });
   });
 
   return (next) => (action) => {
@@ -120,16 +123,16 @@ export const createSocketMiddleware = (history: History): Middleware<{}, AppStat
     if (socket && socket.connected) {
       if (leaderActions.requestLeadership.match(action)) {
         socket.emit('request-leadership', { seq });
-        if (leadershipTimeout) clearTimeout(leadershipTimeout);
-        leadershipTimeout = setTimeout(() => {
+        if (requestLeadershipTimeoutId) clearTimeout(requestLeadershipTimeoutId);
+        requestLeadershipTimeoutId = setTimeout(() => {
           if (!store.getState().leader.isLeader) {
             store.dispatch(leaderActions.setLeader(true));
-            if (pendingState) {
-              store.dispatch(timerActions.setState(pendingState));
-              pendingState = null;
+            if (pendingStateFromServer) {
+              store.dispatch(timerActions.setState(pendingStateFromServer));
+              pendingStateFromServer = null;
             }
           }
-          leadershipTimeout = null;
+          requestLeadershipTimeoutId = null;
         }, 1000);
       }
 
