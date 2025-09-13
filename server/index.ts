@@ -78,9 +78,9 @@ const start = async () => {
   });
 
   io.on('connection', (socket) => {
-    const { lobby = 'default', clientId = null } = socket.handshake.query as {
-      lobby?: string;
-      clientId?: string;
+    const { lobby, clientId } = socket.handshake.query as {
+      lobby: string;
+      clientId: string;
     };
     logger.info({ event: 'connection', lobby, clientId, socketId: socket.id }, 'socket connected');
     if (!lobbies.has(lobby)) {
@@ -129,6 +129,8 @@ const start = async () => {
       const isLeader = !!clientId && clientId === lobbyState.leaderClientId;
       logger.debug({ event: 'check-leadership', lobby, clientId, socketId: socket.id, isLeader }, 'leadership checked');
       if (isLeader) {
+        // Tell the other sockets for this same client id that they are no longer the leader
+        // (e.g. the same device can have multiple tabs open)
         const sockets = lobbyState.clientSockets.get(clientId!) || new Set<string>();
         sockets.forEach((id) => {
           if (id !== socket.id) {
