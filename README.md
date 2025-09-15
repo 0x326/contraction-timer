@@ -48,3 +48,5 @@ docker compose up
 ```
 
 The app will be available at http://localhost:3000 and the Socket.IO server at http://localhost:3001.
+
+Redis caching is optional; provide a `REDIS_HOST` environment variable for the server if you want to persist state to Redis.

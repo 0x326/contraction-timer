@@ -1,6 +1,6 @@
 import fs from 'fs';
 import path from 'path';
-import Redis from 'ioredis';
+import Redis, { RedisOptions } from 'ioredis';
 import type { TimerState } from '../src/store/timer/timer.slice';
 import logger from './logger';
 
@@ -17,9 +17,25 @@ export interface PersistedState {
   [lobby: string]: PersistedLobby;
 }
 
-const redisClient: Redis | null = process.env.REDIS_URL
-  ? new Redis(process.env.REDIS_URL)
-  : null;
+const redisHost = process.env.REDIS_HOST;
+const redisPortEnv = process.env.REDIS_PORT;
+
+let redisClient: Redis | null = null;
+
+if (redisHost) {
+  const redisOptions: RedisOptions = { host: redisHost };
+  if (redisPortEnv) {
+    const parsedPort = Number(redisPortEnv);
+    if (!Number.isNaN(parsedPort)) {
+      redisOptions.port = parsedPort;
+    } else {
+      logger.warn({ redisPortEnv }, 'invalid redis port provided, using default');
+    }
+  }
+  redisClient = new Redis(redisOptions);
+} else {
+  logger.info('redis host not provided; skipping redis persistence');
+}
 
 // Load lobby state either from Redis or from disk
 export async function readState(): Promise<PersistedState> {
