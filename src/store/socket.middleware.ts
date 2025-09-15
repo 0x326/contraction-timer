@@ -1,148 +1,198 @@
 /* eslint-disable sort-imports */
-import { Middleware } from '@reduxjs/toolkit';
-import { History } from 'history';
+import {
+  Middleware,
+  MiddlewareAPI,
+  AnyAction,
+  Dispatch,
+} from '@reduxjs/toolkit';
+import { History, Location } from 'history';
 import { io, Socket } from 'socket.io-client';
 import { connectionActions } from './connection/connection.slice';
 import { leaderActions } from './leader/leader.slice';
 import { AppState } from './root.reducer';
 import { timerActions } from './timer/timer.slice';
+import type { TimerState } from './timer/timer.slice';
 import { setServerTimeOffset } from '../utils/now.util';
+import type {
+  LeadershipInfoPayload,
+  RequestLeadershipPayload,
+  TimerStatePayload,
+  TimerStateUpdatePayload,
+  SyncTimeResponsePayload,
+} from '../socket-events';
 
-export const createSocketMiddleware = (history: History): Middleware<{}, AppState> => (store) => {
-  let seq = 0;
-  let pendingState: AppState['timer'] | null = null;
-  let socket: Socket | null = null;
-  let leadershipTimeout: ReturnType<typeof setTimeout> | null = null;
-  let timeSyncInterval: ReturnType<typeof setInterval> | null = null;
+export function createSocketMiddleware(history: History): Middleware<{}, AppState> {
+  return function socketMiddleware(
+    store: MiddlewareAPI<Dispatch<AnyAction>, AppState>
+  ) {
+    let sequenceNumber = 0;
+    let pendingTimerState: TimerState | null = null;
+    let socketConnection: Socket | null = null;
+    let leadershipRequestTimeout: ReturnType<typeof setTimeout> | null = null;
+    let timeSynchronizationInterval: ReturnType<typeof setInterval> | null = null;
 
-  const getLobbyFromPath = (path: string) => path.split('/').filter(Boolean)[0];
-
-  const getClientId = () => {
-    if (typeof localStorage === 'undefined') return '';
-    let id = localStorage.getItem('clientId');
-    if (!id) {
-      if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
-        id = (crypto as any).randomUUID();
-      } else {
-        id = `${Date.now()}-${Math.random()}`;
-      }
-      localStorage.setItem('clientId', id);
-    }
-    return id;
-  };
-  const clientId = getClientId();
-
-  const connect = (lobby: string) => {
-    if (socket || !lobby || typeof window === 'undefined' || process.env.NODE_ENV === 'test') return;
-    socket = io('http://192.168.0.62:3001', { query: { lobby, clientId } });
-
-    const syncTime = () => {
-      const start = Date.now();
-      socket!.emit('sync-time', (serverTime: number) => {
-        const end = Date.now();
-        const offset = serverTime - (start + (end - start) / 2);
-        setServerTimeOffset(offset);
-      });
-    };
-
-    socket.on('timer-state', (timerState) => {
-      pendingState = timerState;
+    function handleLeadershipRequestTimeout(): void {
       if (!store.getState().leader.isLeader) {
-        store.dispatch(timerActions.setState(timerState));
-        pendingState = null;
+        store.dispatch(leaderActions.setLeader(true));
+        if (pendingTimerState) {
+          store.dispatch(timerActions.setState(pendingTimerState));
+          pendingTimerState = null;
+        }
       }
-    });
+      leadershipRequestTimeout = null;
+    }
 
-    socket.on('leadership-info', (payload: { isLeader: boolean; state?: AppState['timer']; seq?: number }) => {
-      if (leadershipTimeout) {
-        clearTimeout(leadershipTimeout);
-        leadershipTimeout = null;
+    // Extract lobby name from the URL path
+    function extractLobbyFromPath(path: string): string {
+      const segments = path.split('/').filter(Boolean);
+      return segments[0] ?? '';
+    }
+
+    // Retrieve or generate a persistent client identifier
+    function getOrCreateClientId(): string {
+      if (typeof localStorage === 'undefined') return '';
+      let id = localStorage.getItem('clientId');
+      if (!id) {
+        if (typeof crypto !== 'undefined' && 'randomUUID' in crypto) {
+          id = (crypto as any).randomUUID();
+        } else {
+          id = `${Date.now()}-${Math.random()}`;
+        }
+        localStorage.setItem('clientId', id);
       }
-      const { isLeader, state, seq: serverSeq } = payload;
-      if (typeof serverSeq === 'number') {
-        seq = serverSeq;
+      return id;
+    }
+    const clientId = getOrCreateClientId();
+
+    // Open a socket connection and wire up handlers
+    function initializeSocketConnection(lobby: string): void {
+      if (socketConnection || !lobby || typeof window === 'undefined' || process.env.NODE_ENV === 'test') return;
+      socketConnection = io('http://192.168.0.62:3001', { query: { lobby, clientId } });
+
+      function synchronizeTime(): void {
+        const start = Date.now();
+        function applyServerTime({ serverTime }: SyncTimeResponsePayload): void {
+          const end = Date.now();
+          const offset = serverTime - (start + (end - start) / 2);
+          setServerTimeOffset(offset);
+        }
+        socketConnection!.emit('sync-time', applyServerTime);
       }
-      store.dispatch(leaderActions.setLeader(isLeader));
-      if (typeof state !== 'undefined') {
-        store.dispatch(timerActions.setState(state));
-        pendingState = null;
-      } else if (!isLeader && pendingState) {
-        store.dispatch(timerActions.setState(pendingState));
-        pendingState = null;
+
+      function handleIncomingTimerState({ state }: TimerStatePayload): void {
+        pendingTimerState = state;
+        if (!store.getState().leader.isLeader) {
+          store.dispatch(timerActions.setState(state));
+          pendingTimerState = null;
+        }
       }
-      if (isLeader && typeof state === 'undefined') {
-        seq += 1;
-        socket.emit('timer-state', { seq, state: store.getState().timer });
+
+      function handleLeadershipInfo(payload: LeadershipInfoPayload): void {
+        if (leadershipRequestTimeout) {
+          clearTimeout(leadershipRequestTimeout);
+          leadershipRequestTimeout = null;
+        }
+        const { isLeader, state, sequenceNumber: serverSequence } = payload;
+        if (serverSequence !== undefined) {
+          sequenceNumber = serverSequence;
+        }
+        store.dispatch(leaderActions.setLeader(isLeader));
+        if (state !== undefined) {
+          store.dispatch(timerActions.setState(state));
+          pendingTimerState = null;
+        } else if (!isLeader && pendingTimerState) {
+          store.dispatch(timerActions.setState(pendingTimerState));
+          pendingTimerState = null;
+        }
+        if (isLeader && state === undefined) {
+          sequenceNumber += 1;
+          const update: TimerStateUpdatePayload = {
+            sequenceNumber,
+            state: store.getState().timer,
+          };
+          socketConnection!.emit('timer-state', update);
+        }
       }
-    });
 
-    socket.on('transfer-leadership', () => {
-      seq += 1;
-      socket.emit('final-timer-state', { seq, state: store.getState().timer });
-      store.dispatch(leaderActions.setLeader(false));
-    });
-
-    socket.on('connect', () => {
-      store.dispatch(connectionActions.setConnected(true));
-      syncTime();
-      if (timeSyncInterval) clearInterval(timeSyncInterval);
-      timeSyncInterval = setInterval(syncTime, 60 * 1000);
-      socket.emit('check-leadership');
-    });
-
-    socket.on('disconnect', () => {
-      store.dispatch(connectionActions.setConnected(false));
-      if (timeSyncInterval) {
-        clearInterval(timeSyncInterval);
-        timeSyncInterval = null;
+      function handleLeadershipTransfer(): void {
+        sequenceNumber += 1;
+        const finalState: TimerStateUpdatePayload = {
+          sequenceNumber,
+          state: store.getState().timer,
+        };
+        socketConnection!.emit('final-timer-state', finalState);
+        store.dispatch(leaderActions.setLeader(false));
       }
-    });
-  };
 
-  const initialLobby = getLobbyFromPath(history.location.pathname);
-  if (initialLobby) {
-    connect(initialLobby);
-  }
+      function handleConnect(): void {
+        store.dispatch(connectionActions.setConnected(true));
+        synchronizeTime();
+        if (timeSynchronizationInterval) clearInterval(timeSynchronizationInterval);
+        timeSynchronizationInterval = setInterval(synchronizeTime, 60 * 1000);
+        socketConnection!.emit('check-leadership');
+      }
 
-  history.listen((location) => {
-    if (!socket) {
-      const lobby = getLobbyFromPath(location.pathname);
-      if (lobby) {
-        connect(lobby);
+      function handleDisconnect(): void {
+        store.dispatch(connectionActions.setConnected(false));
+        if (timeSynchronizationInterval) {
+          clearInterval(timeSynchronizationInterval);
+          timeSynchronizationInterval = null;
+        }
+      }
+
+      socketConnection.on('timer-state', handleIncomingTimerState);
+      socketConnection.on('leadership-info', handleLeadershipInfo);
+      socketConnection.on('transfer-leadership', handleLeadershipTransfer);
+      socketConnection.on('connect', handleConnect);
+      socketConnection.on('disconnect', handleDisconnect);
+    }
+
+    const initialLobby = extractLobbyFromPath(history.location.pathname);
+    if (initialLobby) {
+      initializeSocketConnection(initialLobby);
+    }
+
+    function handleLocationChange(location: Location): void {
+      if (!socketConnection) {
+        const lobby = extractLobbyFromPath(location.pathname);
+        if (lobby) {
+          initializeSocketConnection(lobby);
+        }
       }
     }
-  });
+    history.listen(handleLocationChange);
 
-  return (next) => (action) => {
-    const result = next(action);
-    const state = store.getState();
+    function nextHandler(next: Dispatch<AnyAction>) {
+      return function actionHandler(action: AnyAction) {
+        const result = next(action);
+        const state = store.getState();
 
-    if (socket && socket.connected) {
-      if (leaderActions.requestLeadership.match(action)) {
-        socket.emit('request-leadership', { seq });
-        if (leadershipTimeout) clearTimeout(leadershipTimeout);
-        leadershipTimeout = setTimeout(() => {
-          if (!store.getState().leader.isLeader) {
-            store.dispatch(leaderActions.setLeader(true));
-            if (pendingState) {
-              store.dispatch(timerActions.setState(pendingState));
-              pendingState = null;
-            }
+        if (socketConnection && socketConnection.connected) {
+          if (leaderActions.requestLeadership.match(action)) {
+            const request: RequestLeadershipPayload = { sequenceNumber };
+            socketConnection.emit('request-leadership', request);
+            if (leadershipRequestTimeout) clearTimeout(leadershipRequestTimeout);
+            leadershipRequestTimeout = setTimeout(handleLeadershipRequestTimeout, 1000);
           }
-          leadershipTimeout = null;
-        }, 1000);
-      }
 
-      if (
-        state.leader.isLeader
-          && action.type.startsWith('timer/')
-          && action.type !== timerActions.setState.type
-      ) {
-        seq += 1;
-        socket.emit('timer-state', { seq, state: state.timer });
-      }
+          if (
+            state.leader.isLeader
+            && action.type.startsWith('timer/')
+            && action.type !== timerActions.setState.type
+          ) {
+            sequenceNumber += 1;
+            const update: TimerStateUpdatePayload = {
+              sequenceNumber,
+              state: state.timer,
+            };
+            socketConnection.emit('timer-state', update);
+          }
+        }
+
+        return result;
+      };
     }
 
-    return result;
+    return nextHandler;
   };
-};
+}

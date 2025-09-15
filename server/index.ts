@@ -1,15 +1,22 @@
-import express, { Request } from 'express';
+import express, { Request, Response } from 'express';
 import http from 'http';
 import cors from 'cors';
-import { Server } from 'socket.io';
+import { Server, Socket } from 'socket.io';
 import { readState, writeState, PersistedState } from './persist';
 import type { TimerState } from '../src/store/timer/timer.slice';
+import type {
+  SyncTimeResponsePayload,
+  RequestLeadershipPayload,
+  LeadershipInfoPayload,
+  TimerStatePayload,
+  TimerStateUpdatePayload,
+} from '../src/socket-events';
 import logger from './logger';
 
-interface PendingTransfer {
+interface PendingLeadershipTransfer {
   newSocketId: string;
   newClientId: string;
-  newSeq: number;
+  newSequenceNumber: number;
   oldSocketId: string | null;
   timeout: NodeJS.Timeout;
 }
@@ -17,10 +24,10 @@ interface PendingTransfer {
 interface LobbyState {
   leaderSocketId: string | null;
   leaderClientId: string | null;
-  lastSeq: number;
+  lastSequenceNumber: number;
   state: TimerState | null;
   clientSockets: Map<string, Set<string>>;
-  pending: PendingTransfer | null;
+  pendingTransfer: PendingLeadershipTransfer | null;
   sockets: Set<string>;
   timeout: NodeJS.Timeout | null;
 }
@@ -32,72 +39,81 @@ const io = new Server(server, {
   cors: { origin: '*' },
 });
 
-const lobbies = new Map<string, LobbyState>();
+const lobbyStateMap = new Map<string, LobbyState>();
 
-const persist = () => {
-  const obj: PersistedState = {};
-  lobbies.forEach((value, key) => {
-    obj[key] = {
+// Persist the current lobby state to disk or redis
+function persistLobbyState(): void {
+  const stateToPersist: PersistedState = {};
+  lobbyStateMap.forEach(function collectLobbyState(value, key) {
+    stateToPersist[key] = {
       leaderClientId: value.leaderClientId,
-      lastSeq: value.lastSeq,
+      lastSequenceNumber: value.lastSequenceNumber,
       state: value.state,
     };
   });
-  void writeState(obj).catch((err) => {
+  void writeState(stateToPersist).catch(function logPersistError(err) {
     logger.error({ err }, 'failed to persist state');
   });
-};
+}
 
-const start = async () => {
-  let persisted: PersistedState = {};
+async function startServer() {
+  let loadedState: PersistedState = {};
   try {
-    persisted = await Promise.race([
+    loadedState = await Promise.race([
       readState(),
-      new Promise<PersistedState>((resolve) => setTimeout(() => resolve({}), 5000)),
+      new Promise<PersistedState>(function resolver(resolve) {
+        function resolveEmptyState(): void {
+          resolve({});
+        }
+        setTimeout(resolveEmptyState, 5000);
+      }),
     ]);
   } catch (err) {
     logger.error({ err }, 'failed to load persisted state');
-    persisted = {};
+    loadedState = {};
   }
-  logger.info({ lobbies: Object.keys(persisted).length }, 'loaded persisted state');
-  Object.entries(persisted).forEach(([lobby, data]) => {
-    lobbies.set(lobby, {
+  logger.info({ lobbies: Object.keys(loadedState).length }, 'loaded persisted state');
+  for (const [lobby, data] of Object.entries(loadedState)) {
+    lobbyStateMap.set(lobby, {
       leaderSocketId: null,
       leaderClientId: data.leaderClientId || null,
-      lastSeq: data.lastSeq || 0,
+      lastSequenceNumber: data.lastSequenceNumber || 0,
       state: data.state || null,
       clientSockets: new Map(),
-      pending: null,
+      pendingTransfer: null,
       sockets: new Set(),
       timeout: null,
     });
-  });
+  }
 
-  app.get('/lobbies', (_req: Request, res: any) => {
-    res.json(Array.from(lobbies.keys()));
-  });
+  function handleLobbiesRequest(_req: Request, res: Response): void {
+    res.json(Array.from(lobbyStateMap.keys()));
+  }
 
-  io.on('connection', (socket) => {
+  app.get('/lobbies', handleLobbiesRequest);
+
+  // Handle a new incoming socket connection
+  function handleSocketConnection(socket: Socket): void {
     const { lobby = 'default', clientId = null } = socket.handshake.query as {
       lobby?: string;
       clientId?: string;
     };
     logger.info({ event: 'connection', lobby, clientId, socketId: socket.id }, 'socket connected');
-    if (!lobbies.has(lobby)) {
-      lobbies.set(lobby, {
+    if (!lobbyStateMap.has(lobby)) {
+      lobbyStateMap.set(lobby, {
         leaderSocketId: null,
         leaderClientId: null,
-        lastSeq: 0,
+        lastSequenceNumber: 0,
         state: null,
         clientSockets: new Map(),
-        pending: null,
+        pendingTransfer: null,
         sockets: new Set(),
         timeout: null,
       });
-      persist();
+      persistLobbyState();
     }
     socket.join(lobby);
-    const lobbyState = lobbies.get(lobby)!;
+    const lobbyState = lobbyStateMap.get(lobby)!;
 
     if (lobbyState.timeout) {
       clearTimeout(lobbyState.timeout);
@@ -116,53 +132,67 @@ const start = async () => {
     }
 
     if (lobbyState.state) {
-      socket.emit('timer-state', lobbyState.state);
+      const timerPayload: TimerStatePayload = { state: lobbyState.state };
+      socket.emit('timer-state', timerPayload);
     }
 
-    socket.on('sync-time', (cb: (serverTime: number) => void) => {
+    // Respond with the server's current time for clock synchronization
+    function handleSyncTime(
+      respond: (payload: SyncTimeResponsePayload) => void,
+    ): void {
       const isLeader = !!clientId && clientId === lobbyState.leaderClientId;
       logger.debug({ event: 'sync-time', lobby, clientId, socketId: socket.id, isLeader });
-      cb(Date.now());
-    });
+      respond({ serverTime: Date.now() });
+    }
 
-    socket.on('check-leadership', () => {
+    // Let the client know who currently holds leadership
+    function handleCheckLeadership(): void {
       const isLeader = !!clientId && clientId === lobbyState.leaderClientId;
       logger.debug({ event: 'check-leadership', lobby, clientId, socketId: socket.id, isLeader }, 'leadership checked');
       if (isLeader) {
-        const sockets = lobbyState.clientSockets.get(clientId!) || new Set<string>();
-        sockets.forEach((id) => {
+        const clientSocketIds = lobbyState.clientSockets.get(clientId!) || new Set<string>();
+        clientSocketIds.forEach(function notifyOtherSockets(id) {
           if (id !== socket.id) {
-            io.to(id).emit('leadership-info', { isLeader: false });
+            const info: LeadershipInfoPayload = { isLeader: false };
+            io.to(id).emit('leadership-info', info);
           }
         });
         lobbyState.leaderSocketId = socket.id;
       }
-      socket.emit('leadership-info', { isLeader, seq: lobbyState.lastSeq });
-    });
+      const info: LeadershipInfoPayload = {
+        isLeader,
+        sequenceNumber: lobbyState.lastSequenceNumber,
+      };
+      socket.emit('leadership-info', info);
+    }
 
-    socket.on('request-leadership', ({ seq }: { seq: number }) => {
-      logger.info({ event: 'request-leadership', lobby, clientId, seq, socketId: socket.id }, 'leadership requested');
+    // Initiate a leadership change request from this socket
+    function handleRequestLeadership({ sequenceNumber }: RequestLeadershipPayload): void {
+      logger.info({ event: 'request-leadership', lobby, clientId, sequenceNumber, socketId: socket.id }, 'leadership requested');
       if (clientId === lobbyState.leaderClientId) {
         lobbyState.leaderSocketId = socket.id;
-        lobbyState.lastSeq = seq;
-        socket.emit('leadership-info', { isLeader: true, seq: lobbyState.lastSeq });
+        lobbyState.lastSequenceNumber = sequenceNumber;
+        const info: LeadershipInfoPayload = {
+          isLeader: true,
+          sequenceNumber: lobbyState.lastSequenceNumber,
+        };
+        socket.emit('leadership-info', info);
         return;
       }
 
       if (lobbyState.leaderClientId) {
-        const oldSockets =
+        const currentLeaderSockets =
           lobbyState.clientSockets.get(lobbyState.leaderClientId) || new Set([lobbyState.leaderSocketId!]);
-        lobbyState.pending = {
+        lobbyState.pendingTransfer = {
           newSocketId: socket.id,
           newClientId: clientId!,
-          newSeq: seq,
+          newSequenceNumber: sequenceNumber,
           oldSocketId: lobbyState.leaderSocketId,
-          timeout: setTimeout(() => {
-            finalizeTransfer(null);
-          }, 500),
+          timeout: setTimeout(handleTransferTimeout, 500),
         };
-        oldSockets.forEach((id) => {
-          io.to(id).emit('leadership-info', { isLeader: false });
+        currentLeaderSockets.forEach(function notifyCurrentLeader(id) {
+          const info: LeadershipInfoPayload = { isLeader: false };
+          io.to(id).emit('leadership-info', info);
         });
         if (lobbyState.leaderSocketId) {
           io.to(lobbyState.leaderSocketId).emit('transfer-leadership');
@@ -171,87 +201,111 @@ const start = async () => {
       } else {
         lobbyState.leaderSocketId = socket.id;
         lobbyState.leaderClientId = clientId!;
-        lobbyState.lastSeq = seq;
-        const payload: { isLeader: true; seq: number; state?: TimerState } = {
+        lobbyState.lastSequenceNumber = sequenceNumber;
+        const info: LeadershipInfoPayload = {
           isLeader: true,
-          seq: lobbyState.lastSeq,
+          sequenceNumber: lobbyState.lastSequenceNumber,
         };
-        if (lobbyState.state) payload.state = lobbyState.state;
-        socket.emit('leadership-info', payload);
-        logger.info({ event: 'leadership-granted', lobby, clientId, seq: lobbyState.lastSeq }, 'leadership granted');
-        persist();
+        if (lobbyState.state) info.state = lobbyState.state;
+        socket.emit('leadership-info', info);
+        logger.info({ event: 'leadership-granted', lobby, clientId, sequenceNumber: lobbyState.lastSequenceNumber }, 'leadership granted');
+        persistLobbyState();
       }
-    });
+    }
 
-    const finalizeTransfer = (statePayload: { state: TimerState } | null) => {
-      if (!lobbyState.pending) return;
-      const { newSocketId, newClientId, newSeq, oldSocketId, timeout } = lobbyState.pending;
+    // Complete a pending leadership transfer once final state is known
+    function finalizeLeadershipTransfer(statePayload: TimerStatePayload | null): void {
+      if (!lobbyState.pendingTransfer) return;
+      const { newSocketId, newClientId, newSequenceNumber, oldSocketId, timeout } = lobbyState.pendingTransfer;
       clearTimeout(timeout);
       if (statePayload) {
         lobbyState.state = statePayload.state;
       }
       lobbyState.leaderSocketId = newSocketId;
       lobbyState.leaderClientId = newClientId;
-      lobbyState.lastSeq = newSeq;
-      const payload: { isLeader: true; seq: number; state?: TimerState } = {
+      lobbyState.lastSequenceNumber = newSequenceNumber;
+      const info: LeadershipInfoPayload = {
         isLeader: true,
-        seq: lobbyState.lastSeq,
+        sequenceNumber: lobbyState.lastSequenceNumber,
       };
-      if (lobbyState.state) payload.state = lobbyState.state;
-      io.to(newSocketId).emit('leadership-info', payload);
-      logger.info({ event: 'leadership-granted', lobby, clientId: newClientId, seq: lobbyState.lastSeq }, 'leadership granted');
+      if (lobbyState.state) info.state = lobbyState.state;
+      io.to(newSocketId).emit('leadership-info', info);
+      logger.info({ event: 'leadership-granted', lobby, clientId: newClientId, sequenceNumber: lobbyState.lastSequenceNumber }, 'leadership granted');
       if (lobbyState.state) {
-        io.to(lobby).except(newSocketId).except(oldSocketId ?? '').emit('timer-state', lobbyState.state);
+        const timerPayload: TimerStatePayload = { state: lobbyState.state };
+        io.to(lobby).except(newSocketId).except(oldSocketId ?? '').emit('timer-state', timerPayload);
       }
-      lobbyState.pending = null;
-      persist();
-    };
+      lobbyState.pendingTransfer = null;
+      persistLobbyState();
+    }
 
-    socket.on('final-timer-state', (payload: { seq: number; state: TimerState }) => {
+    // The old leader sends final state during a transfer
+    function handleFinalTimerState(payload: TimerStateUpdatePayload): void {
       if (socket.id !== lobbyState.leaderSocketId) return;
-      logger.info({ event: 'final-timer-state', lobby, clientId, seq: payload.seq }, 'received final state');
-      finalizeTransfer(payload);
-    });
+      logger.info({ event: 'final-timer-state', lobby, clientId, sequenceNumber: payload.sequenceNumber }, 'received final state');
+      finalizeLeadershipTransfer(payload);
+    }
 
-    socket.on('timer-state', (payload: { seq: number; state: TimerState }) => {
+    // Broadcast timer state updates from the current leader
+    function handleTimerStateUpdate(payload: TimerStateUpdatePayload): void {
       if (socket.id !== lobbyState.leaderSocketId) return;
-      if (payload.seq <= lobbyState.lastSeq) return;
-      lobbyState.lastSeq = payload.seq;
+      if (payload.sequenceNumber <= lobbyState.lastSequenceNumber) return;
+      lobbyState.lastSequenceNumber = payload.sequenceNumber;
       lobbyState.state = payload.state;
-      logger.debug({ event: 'timer-state', lobby, clientId, seq: payload.seq }, 'timer state received');
-      socket.to(lobby).emit('timer-state', payload.state);
-      persist();
-    });
+      logger.debug({ event: 'timer-state', lobby, clientId, sequenceNumber: payload.sequenceNumber }, 'timer state received');
+      const timerPayload: TimerStatePayload = { state: payload.state };
+      socket.to(lobby).emit('timer-state', timerPayload);
+      persistLobbyState();
+    }
 
-    socket.on('disconnect', () => {
+    // Clean up when a socket disconnects
+    function handleDisconnect(): void {
       logger.info({ event: 'disconnect', lobby, clientId, socketId: socket.id }, 'socket disconnected');
       if (socket.id === lobbyState.leaderSocketId) {
         lobbyState.leaderSocketId = null;
       }
       if (clientId) {
-        const sockets = lobbyState.clientSockets.get(clientId);
-        if (sockets) {
-          sockets.delete(socket.id);
-          if (sockets.size === 0) {
+        const clientSocketSet = lobbyState.clientSockets.get(clientId);
+        if (clientSocketSet) {
+          clientSocketSet.delete(socket.id);
+          if (clientSocketSet.size === 0) {
             lobbyState.clientSockets.delete(clientId);
           }
         }
       }
       lobbyState.sockets.delete(socket.id);
       if (lobbyState.sockets.size === 0) {
-        lobbyState.timeout = setTimeout(() => {
-          lobbies.delete(lobby);
-          persist();
-        }, 24 * 60 * 60 * 1000);
-        persist();
+        lobbyState.timeout = setTimeout(removeInactiveLobby, 24 * 60 * 60 * 1000);
+        persistLobbyState();
       }
-    });
-  });
+    }
+
+    // Drop pending transfers that took too long
+    function handleTransferTimeout(): void {
+      finalizeLeadershipTransfer(null);
+    }
+
+    // Remove empty lobbies after a day of inactivity
+    function removeInactiveLobby(): void {
+      lobbyStateMap.delete(lobby);
+      persistLobbyState();
+    }
+
+    socket.on('sync-time', handleSyncTime);
+    socket.on('check-leadership', handleCheckLeadership);
+    socket.on('request-leadership', handleRequestLeadership);
+    socket.on('final-timer-state', handleFinalTimerState);
+    socket.on('timer-state', handleTimerStateUpdate);
+    socket.on('disconnect', handleDisconnect);
+  }
+
+  io.on('connection', handleSocketConnection);
 
   const PORT = process.env.PORT || 3001;
-  server.listen(PORT, () => {
+  function logServerListening(): void {
     logger.info({ port: PORT }, 'Socket server listening');
-  });
-};
+  }
+  server.listen(PORT, logServerListening);
+}
 
-start();
+startServer();
