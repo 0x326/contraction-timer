@@ -1,0 +1,47 @@
+name: Deploy Backend
+
+on:
+  push:
+    branches: [ main ]
+    paths:
+      - 'server/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'Procfile'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      EB_APPLICATION: ${{ secrets.EB_APPLICATION }}
+      EB_ENVIRONMENT: ${{ secrets.EB_ENVIRONMENT }}
+      EB_BUCKET: ${{ secrets.EB_BUCKET }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION }}
+      - name: Install dependencies
+        run: npm ci
+      - name: Build server
+        run: npm run build:server
+      - name: Create deployment package
+        run: |
+          zip -r deploy.zip package.json package-lock.json Procfile server/dist
+          aws s3 cp deploy.zip s3://$EB_BUCKET/deploy-${GITHUB_SHA}.zip
+      - name: Create application version
+        run: |
+          aws elasticbeanstalk create-application-version --application-name $EB_APPLICATION --version-label ${GITHUB_SHA} --source-bundle S3Bucket=$EB_BUCKET,S3Key=deploy-${GITHUB_SHA}.zip
+      - name: Update environment
+        run: |
+          aws elasticbeanstalk update-environment --environment-name $EB_ENVIRONMENT --version-label ${GITHUB_SHA} \
+            --option-settings Namespace=aws:elasticbeanstalk:application:environment,OptionName=REDIS_HOST,Value=${{ secrets.REDIS_HOST }} \
+                             Namespace=aws:elasticbeanstalk:application:environment,OptionName=REDIS_PORT,Value=${{ secrets.REDIS_PORT }} \
+                             Namespace=aws:elasticbeanstalk:application:environment,OptionName=REDIS_PASSWORD,Value=${{ secrets.REDIS_PASSWORD }} \
+                             Namespace=aws:elasticbeanstalk:environment:process:default,OptionName=HealthCheckPath,Value=/

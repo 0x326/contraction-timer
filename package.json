@@ -56,7 +56,9 @@
     "lint:css": "stylelint './src/**/*.{js,jsx,ts,tsx}'",
     "lint:precommit": "eslint",
     "lint:css:precommit": "stylelint",
-    "test:precommit": "CI=true react-scripts test --passWithNoTests --findRelatedTests"
+    "test:precommit": "CI=true react-scripts test --passWithNoTests --findRelatedTests",
+    "build:server": "tsc -p server/tsconfig.json",
+    "start:server": "node server/dist/index.js"
   },
   "browserslist": {
     "production": [
