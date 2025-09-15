@@ -5,6 +5,7 @@ import { Modal } from '../modal/modal.component';
 import { modalActions } from '../../store/modal/modal.slice';
 import { history } from '../../history';
 import { Copy } from '../copy/copy.component';
+import { buildBackendUrl } from '../../config/backend';
 
 export const WelcomeModal: React.FC = () => {
   const dispatch = useDispatch();
@@ -13,7 +14,7 @@ export const WelcomeModal: React.FC = () => {
   const [role, setRole] = useState<'recorder' | 'monitor'>('recorder');
 
   useEffect(() => {
-    fetch('http://localhost:3001/lobbies')
+    fetch(buildBackendUrl('/lobbies'))
       .then((res) => res.json())
       .then((data) => setLobbies(data))
       .catch(() => setLobbies([]));
