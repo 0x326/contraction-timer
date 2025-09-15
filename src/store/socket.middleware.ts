@@ -13,6 +13,7 @@ import { AppState } from './root.reducer';
 import { timerActions } from './timer/timer.slice';
 import type { TimerState } from './timer/timer.slice';
 import { setServerTimeOffset } from '../utils/now.util';
+import { BACKEND_SERVER_URL } from '../config/backend';
 import type {
   LeadershipInfoPayload,
   RequestLeadershipPayload,
@@ -67,7 +68,7 @@ export function createSocketMiddleware(history: History): Middleware<{}, AppStat
     // Open a socket connection and wire up handlers
     function initializeSocketConnection(lobby: string): void {
       if (socketConnection || !lobby || typeof window === 'undefined' || process.env.NODE_ENV === 'test') return;
-      socketConnection = io('http://192.168.0.62:3001', { query: { lobby, clientId } });
+      socketConnection = io(BACKEND_SERVER_URL, { query: { lobby, clientId } });
 
       function synchronizeTime(): void {
         const start = Date.now();
