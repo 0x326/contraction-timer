@@ -2,6 +2,8 @@
 
 A minimalist web app for timing and tracking labour contractions.
 
+Now with real-time syncing.
+
 ![App screenshots](docs/app.png)
 ## Try it out
 
