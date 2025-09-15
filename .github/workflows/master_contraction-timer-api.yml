@@ -7,6 +7,9 @@ on:
   push:
     branches:
       - master
+    paths:
+      - 'server/**'
+      - '.github/workflows/master_contraction-timer-api.yml'
   workflow_dispatch:
 
 jobs:
