@@ -9,9 +9,7 @@ export const createStore = (history: History, persist: boolean) => {
   const segments = history.location.pathname.split('/').filter(Boolean);
   const lobby = segments[0];
   // Type definitions are incorrect, use 'any' to bypass (https://github.com/elgerlambert/redux-localstorage/issues/78)
-  const persistStateEnhancer: any = persistState(['timer'] as any, {
-    key: lobby ? `redux:${lobby}` : 'redux',
-  });
+  const persistStateEnhancer: any = persistState(['timer', lobby ? `${lobby}` : 'default'] as any);
 
   return configureStore({
     reducer: rootReducer,
