@@ -12,10 +12,65 @@ const isLocalhost = Boolean(
     || window.location.hostname.match(LOCALHOST_PATTERN_IPV4)
 );
 
+let isControllerChangeListenerRegistered = false;
+let hasReloadedForNewServiceWorker = false;
+
+const setupControllerChangeListener = () => {
+  if (isControllerChangeListenerRegistered) {
+    return;
+  }
+
+  navigator.serviceWorker.addEventListener('controllerchange', () => {
+    if (hasReloadedForNewServiceWorker) {
+      return;
+    }
+
+    hasReloadedForNewServiceWorker = true;
+    window.location.reload();
+  });
+
+  isControllerChangeListenerRegistered = true;
+};
+
+const requestServiceWorkerSkipWaiting = (
+  registration: ServiceWorkerRegistration,
+  worker?: ServiceWorker | null
+) => {
+  if (!navigator.serviceWorker.controller) {
+    return;
+  }
+
+  const serviceWorker = worker || registration.waiting;
+
+  serviceWorker?.postMessage({ type: 'SKIP_WAITING' });
+};
+
+const handleInstalledServiceWorker = (
+  registration: ServiceWorkerRegistration,
+  config?: Config,
+  worker?: ServiceWorker | null
+) => {
+  const hasExistingServiceWorker = Boolean(navigator.serviceWorker.controller);
+
+  if (hasExistingServiceWorker) {
+    requestServiceWorkerSkipWaiting(registration, worker);
+
+    if (config?.onUpdate) {
+      config.onUpdate(registration);
+    }
+  } else if (config?.onSuccess) {
+    config.onSuccess(registration);
+  }
+};
+
 const registerServiceWorker = (swUrl: string, config?: Config) => {
   navigator.serviceWorker
     .register(swUrl)
     .then((registration) => {
+      if (registration.waiting) {
+        handleInstalledServiceWorker(registration, config, registration.waiting);
+      }
+
       registration.onupdatefound = () => {
         const { installing } = registration;
 
@@ -25,15 +80,7 @@ const registerServiceWorker = (swUrl: string, config?: Config) => {
 
         installing.onstatechange = () => {
           if (installing.state === 'installed') {
-            const hasExistingServiceWorker = navigator.serviceWorker.controller;
-
-            if (hasExistingServiceWorker) {
-              if (config?.onUpdate) {
-                config.onUpdate(registration);
-              }
-            } else if (config && config.onSuccess) {
-              config.onSuccess(registration);
-            }
+            handleInstalledServiceWorker(registration, config, installing);
           }
         };
       };
@@ -76,6 +123,8 @@ export const register = (config?: Config) => {
     if (!isSameOrigin) {
       return;
     }
+
+    setupControllerChangeListener();
 
     window.addEventListener('load', () => {
       const swUrl = `${process.env.PUBLIC_URL}/service-worker.js`;
