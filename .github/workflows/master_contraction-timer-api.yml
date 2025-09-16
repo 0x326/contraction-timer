@@ -50,7 +50,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: ../package-root
+          path: package-root
 
   deploy:
     runs-on: ubuntu-latest
