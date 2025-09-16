@@ -166,28 +166,37 @@ export function createSocketMiddleware(history: History): Middleware<{}, AppStat
     function nextHandler(next: Dispatch<AnyAction>) {
       return function actionHandler(action: AnyAction) {
         const result = next(action);
-        const state = store.getState();
 
-        if (socketConnection && socketConnection.connected) {
-          if (leaderActions.requestLeadership.match(action)) {
+        if (leaderActions.requestLeadership.match(action)) {
+          if (socketConnection && socketConnection.connected) {
             const request: RequestLeadershipPayload = { sequenceNumber };
             socketConnection.emit('request-leadership', request);
             if (leadershipRequestTimeout) clearTimeout(leadershipRequestTimeout);
             leadershipRequestTimeout = setTimeout(handleLeadershipRequestTimeout, 1000);
+          } else {
+            if (leadershipRequestTimeout) {
+              clearTimeout(leadershipRequestTimeout);
+              leadershipRequestTimeout = null;
+            }
+            handleLeadershipRequestTimeout();
           }
+        }
 
-          if (
-            state.leader.isLeader
-            && action.type.startsWith('timer/')
-            && action.type !== timerActions.setState.type
-          ) {
-            sequenceNumber += 1;
-            const update: TimerStateUpdatePayload = {
-              sequenceNumber,
-              state: state.timer,
-            };
-            socketConnection.emit('timer-state', update);
-          }
+        const state = store.getState();
+
+        if (
+          socketConnection
+          && socketConnection.connected
+          && state.leader.isLeader
+          && action.type.startsWith('timer/')
+          && action.type !== timerActions.setState.type
+        ) {
+          sequenceNumber += 1;
+          const update: TimerStateUpdatePayload = {
+            sequenceNumber,
+            state: state.timer,
+          };
+          socketConnection.emit('timer-state', update);
         }
 
         return result;
