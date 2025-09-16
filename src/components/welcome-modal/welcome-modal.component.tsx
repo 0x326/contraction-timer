@@ -6,6 +6,21 @@ import { modalActions } from '../../store/modal/modal.slice';
 import { history } from '../../history';
 import { Copy } from '../copy/copy.component';
 import { buildBackendUrl } from '../../config/backend';
+import {
+  StyledContent,
+  StyledField,
+  StyledInput,
+  StyledLabel,
+  StyledLobbyButton,
+  StyledLobbyList,
+  StyledLobbyListItem,
+  StyledLobbySection,
+  StyledLobbySectionHeading,
+  StyledRoleFieldset,
+  StyledRoleLabel,
+  StyledRoleLegend,
+  StyledRoleOptions,
+} from './welcome-modal.styles';
 
 export const WelcomeModal: React.FC = () => {
   const dispatch = useDispatch();
@@ -40,53 +55,72 @@ export const WelcomeModal: React.FC = () => {
       secondaryButtonOnClick={handleCancel}
     >
       <Copy>
-        {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-        <label htmlFor="lobby-input">Lobby</label>
-        <input
-          id="lobby-input"
-          value={lobby}
-          onChange={(e) => setLobby(e.target.value)}
-          list="lobbies"
-        />
-        <datalist id="lobbies">
-          {lobbies.map((l) => (
-            <option key={l} value={l}>{l}</option>
-          ))}
-        </datalist>
-
-        {lobbies.length > 0 && (
-          <ul>
-            {lobbies.map((l) => (
-              <li key={l}>
-                <button type="button" onClick={() => setLobby(l)}>{l}</button>
-              </li>
-            ))}
-          </ul>
-        )}
-
-        <fieldset>
-          <legend>Role</legend>
-          <label htmlFor="role-recorder">
-            <input
-              id="role-recorder"
-              type="radio"
-              value="recorder"
-              checked={role === 'recorder'}
-              onChange={() => setRole('recorder')}
+        <StyledContent>
+          <StyledField>
+            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+            <StyledLabel htmlFor="lobby-input">Lobby</StyledLabel>
+            <StyledInput
+              id="lobby-input"
+              value={lobby}
+              onChange={(e) => setLobby(e.target.value)}
+              list="lobbies"
             />
-            Recorder
-          </label>
-          <label htmlFor="role-monitor">
-            <input
-              id="role-monitor"
-              type="radio"
-              value="monitor"
-              checked={role === 'monitor'}
-              onChange={() => setRole('monitor')}
-            />
-            Monitor
-          </label>
-        </fieldset>
+            <datalist id="lobbies">
+              {lobbies.map((l) => (
+                <option key={l} value={l}>{l}</option>
+              ))}
+            </datalist>
+          </StyledField>
+
+          {lobbies.length > 0 && (
+            <StyledLobbySection>
+              <StyledLobbySectionHeading>
+                Or choose from an existing lobby
+              </StyledLobbySectionHeading>
+
+              <StyledLobbyList>
+                {lobbies.map((l) => (
+                  <StyledLobbyListItem key={l}>
+                    <StyledLobbyButton
+                      type="button"
+                      onClick={() => setLobby(l)}
+                      $selected={lobby === l}
+                      aria-pressed={lobby === l}
+                    >
+                      {l}
+                    </StyledLobbyButton>
+                  </StyledLobbyListItem>
+                ))}
+              </StyledLobbyList>
+            </StyledLobbySection>
+          )}
+
+          <StyledRoleFieldset>
+            <StyledRoleLegend>Role</StyledRoleLegend>
+            <StyledRoleOptions>
+              <StyledRoleLabel htmlFor="role-recorder" $selected={role === 'recorder'}>
+                <input
+                  id="role-recorder"
+                  type="radio"
+                  value="recorder"
+                  checked={role === 'recorder'}
+                  onChange={() => setRole('recorder')}
+                />
+                Recorder
+              </StyledRoleLabel>
+              <StyledRoleLabel htmlFor="role-monitor" $selected={role === 'monitor'}>
+                <input
+                  id="role-monitor"
+                  type="radio"
+                  value="monitor"
+                  checked={role === 'monitor'}
+                  onChange={() => setRole('monitor')}
+                />
+                Monitor
+              </StyledRoleLabel>
+            </StyledRoleOptions>
+          </StyledRoleFieldset>
+        </StyledContent>
       </Copy>
     </Modal>
   );
