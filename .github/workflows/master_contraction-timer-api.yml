@@ -26,6 +26,7 @@ jobs:
         with:
           node-version: '22.x'
           cache: 'npm'
+          cache-dependency-path: 'server/package-lock.json'
 
       - name: Install dependencies
         run: npm ci
@@ -40,14 +41,16 @@ jobs:
 
       - name: Create deployment archive
         run: |
-          rm -rf node_modules .parcel-cache
-          zip -r ../contraction-timer-api.zip . -x "*.git*"
+          mkdir -p ../package-root
+          # create a minimal package.json rooted for runtime
+          jq '{name,version,private:true,scripts:{start:.scripts.start}}' package.json > ../package-root/package.json
+          cp -r dist ../package-root/dist
 
       - name: Upload deployment artifact
         uses: actions/upload-artifact@v4
         with:
           name: node-app
-          path: contraction-timer-api.zip
+          path: ../package-root
 
   deploy:
     runs-on: ubuntu-latest
@@ -61,7 +64,7 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: node-app
-          path: ./node-app
+          path: ./app
 
       - name: Login to Azure
         uses: azure/login@v2
@@ -75,4 +78,4 @@ jobs:
         with:
           app-name: 'contraction-timer-api'
           slot-name: 'Production'
-          package: node-app/contraction-timer-api.zip
+          package: ./app
