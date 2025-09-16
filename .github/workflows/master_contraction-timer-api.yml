@@ -1,4 +1,4 @@
-name: Build and deploy Docker image to Azure Web App - contraction-timer-api
+name: Build and deploy Node.js app to Azure Web App - contraction-timer-api
 
 on:
   push:
@@ -17,11 +17,6 @@ jobs:
         working-directory: server
     permissions:
       contents: read
-      packages: write
-    env:
-      IMAGE_NAME: contraction-timer-api
-    outputs:
-      image: ${{ steps.docker-publish.outputs.image }}
 
     steps:
       - uses: actions/checkout@v4
@@ -31,7 +26,6 @@ jobs:
         with:
           node-version: '22.x'
           cache: 'npm'
-          cache-dependency-path: 'server/package-lock.json'
 
       - name: Install dependencies
         run: npm ci
@@ -44,22 +38,16 @@ jobs:
       - name: Run tests
         run: npm test --if-present
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push Docker image
-        id: docker-publish
-        working-directory: ${{ github.workspace }}
+      - name: Create deployment archive
         run: |
-          OWNER="${GITHUB_REPOSITORY_OWNER,,}"
-          IMAGE_URI="ghcr.io/$OWNER/$IMAGE_NAME:${GITHUB_SHA}"
-          docker build -f server/Dockerfile -t "$IMAGE_URI" .
-          docker push "$IMAGE_URI"
-          echo "image=$IMAGE_URI" >> "$GITHUB_OUTPUT"
+          rm -rf node_modules .parcel-cache
+          zip -r ../contraction-timer-api.zip . -x "*.git*"
+
+      - name: Upload deployment artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: node-app
+          path: contraction-timer-api.zip
 
   deploy:
     runs-on: ubuntu-latest
@@ -69,6 +57,12 @@ jobs:
       contents: read
 
     steps:
+      - name: Download build artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: node-app
+          path: ./node-app
+
       - name: Login to Azure
         uses: azure/login@v2
         with:
@@ -76,44 +70,9 @@ jobs:
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_498CE618BC8B4059BDF20BFB621955FA }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_62B72743BD084628A81414BB1C47AA16 }}
 
-      - name: Configure Web App container image
-        env:
-          WEBAPP_NAME: contraction-timer-api
-          IMAGE_URI: ${{ needs.build.outputs.image }}
-        run: |
-          if [ -z "${{ secrets.GHCR_USERNAME }}" ] || [ -z "${{ secrets.GHCR_TOKEN }}" ]; then
-            echo "Secrets GHCR_USERNAME and GHCR_TOKEN must be configured with GitHub Container Registry credentials." >&2
-            exit 1
-          fi
-
-          RESOURCE_GROUP=$(az webapp show --name "$WEBAPP_NAME" --query resourceGroup -o tsv)
-          if [ -z "$RESOURCE_GROUP" ]; then
-            echo "Unable to determine resource group for $WEBAPP_NAME" >&2
-            exit 1
-          fi
-
-          SLOT_NAME="Production"
-          SLOT_EXISTS=$(az webapp deployment slot list --name "$WEBAPP_NAME" --resource-group "$RESOURCE_GROUP" --query "[?name=='$SLOT_NAME'].name" -o tsv)
-
-          if [ -n "$SLOT_EXISTS" ]; then
-            az webapp config container set \
-              --name "$WEBAPP_NAME" \
-              --resource-group "$RESOURCE_GROUP" \
-              --slot "$SLOT_NAME" \
-              --docker-custom-image-name "$IMAGE_URI" \
-              --docker-registry-server-url https://ghcr.io \
-              --docker-registry-server-user "${{ secrets.GHCR_USERNAME }}" \
-              --docker-registry-server-password "${{ secrets.GHCR_TOKEN }}"
-
-            az webapp restart --name "$WEBAPP_NAME" --resource-group "$RESOURCE_GROUP" --slot "$SLOT_NAME"
-          else
-            az webapp config container set \
-              --name "$WEBAPP_NAME" \
-              --resource-group "$RESOURCE_GROUP" \
-              --docker-custom-image-name "$IMAGE_URI" \
-              --docker-registry-server-url https://ghcr.io \
-              --docker-registry-server-user "${{ secrets.GHCR_USERNAME }}" \
-              --docker-registry-server-password "${{ secrets.GHCR_TOKEN }}"
-
-            az webapp restart --name "$WEBAPP_NAME" --resource-group "$RESOURCE_GROUP"
-          fi
+      - name: Deploy to Azure Web App
+        uses: azure/webapps-deploy@v3
+        with:
+          app-name: 'contraction-timer-api'
+          slot-name: 'Production'
+          package: node-app/contraction-timer-api.zip
