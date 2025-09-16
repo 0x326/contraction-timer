@@ -35,6 +35,14 @@ interface LobbyState {
 const app = express();
 app.use(cors());
 const server = http.createServer(app);
+
+function handleHealthCheck(_req: Request, res: Response): void {
+  res.status(200).json({ status: 'ok' });
+}
+
+app.get('/', handleHealthCheck);
+app.get('/healthz', handleHealthCheck);
+app.get('/ping', handleHealthCheck);
 const io = new Server(server, {
   cors: { origin: '*' },
 });
@@ -301,7 +309,10 @@ async function startServer() {
 
   io.on('connection', handleSocketConnection);
 
-  const PORT = process.env.PORT || 3001;
+  const DEFAULT_PORT = 3001;
+  const envPort = process.env.PORT;
+  const parsedPort = envPort === undefined ? NaN : Number.parseInt(envPort, 10);
+  const PORT = Number.isNaN(parsedPort) || parsedPort <= 0 ? DEFAULT_PORT : parsedPort;
   function logServerListening(): void {
     logger.info({ port: PORT }, 'Socket server listening');
   }
