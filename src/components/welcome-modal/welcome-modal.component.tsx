@@ -47,8 +47,8 @@ export const WelcomeModal: React.FC = () => {
 
   return (
     <Modal
-      heading="Join a lobby"
-      primaryButtonText="Join"
+      heading="Choose a patient"
+      primaryButtonText="Select"
       primaryButtonOnClick={handleJoin}
       primaryButtonDisabled={!lobby}
       secondaryButtonText="Cancel"
@@ -56,26 +56,36 @@ export const WelcomeModal: React.FC = () => {
     >
       <Copy>
         <StyledContent>
-          <StyledField>
-            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
-            <StyledLabel htmlFor="lobby-input">Lobby</StyledLabel>
-            <StyledInput
-              id="lobby-input"
-              value={lobby}
-              onChange={(e) => setLobby(e.target.value)}
-              list="lobbies"
-            />
-            <datalist id="lobbies">
-              {lobbies.map((l) => (
-                <option key={l} value={l}>{l}</option>
-              ))}
-            </datalist>
-          </StyledField>
+          <StyledRoleFieldset>
+            <StyledRoleLegend>Your role</StyledRoleLegend>
+            <StyledRoleOptions>
+              <StyledRoleLabel htmlFor="role-recorder" $selected={role === 'recorder'}>
+                <input
+                  id="role-recorder"
+                  type="radio"
+                  value="recorder"
+                  checked={role === 'recorder'}
+                  onChange={() => setRole('recorder')}
+                />
+                Data recorder
+              </StyledRoleLabel>
+              <StyledRoleLabel htmlFor="role-monitor" $selected={role === 'monitor'}>
+                <input
+                  id="role-monitor"
+                  type="radio"
+                  value="monitor"
+                  checked={role === 'monitor'}
+                  onChange={() => setRole('monitor')}
+                />
+                Monitor
+              </StyledRoleLabel>
+            </StyledRoleOptions>
+          </StyledRoleFieldset>
 
           {lobbies.length > 0 && (
             <StyledLobbySection>
               <StyledLobbySectionHeading>
-                Or choose from an existing lobby
+                Choose from an existing patient
               </StyledLobbySectionHeading>
 
               <StyledLobbyList>
@@ -95,31 +105,31 @@ export const WelcomeModal: React.FC = () => {
             </StyledLobbySection>
           )}
 
-          <StyledRoleFieldset>
-            <StyledRoleLegend>Role</StyledRoleLegend>
-            <StyledRoleOptions>
-              <StyledRoleLabel htmlFor="role-recorder" $selected={role === 'recorder'}>
-                <input
-                  id="role-recorder"
-                  type="radio"
-                  value="recorder"
-                  checked={role === 'recorder'}
-                  onChange={() => setRole('recorder')}
-                />
-                Recorder
-              </StyledRoleLabel>
-              <StyledRoleLabel htmlFor="role-monitor" $selected={role === 'monitor'}>
-                <input
-                  id="role-monitor"
-                  type="radio"
-                  value="monitor"
-                  checked={role === 'monitor'}
-                  onChange={() => setRole('monitor')}
-                />
-                Monitor
-              </StyledRoleLabel>
-            </StyledRoleOptions>
-          </StyledRoleFieldset>
+          <StyledField>
+            {/* eslint-disable-next-line jsx-a11y/label-has-associated-control */}
+            <StyledLabel htmlFor="lobby-input">
+              {lobbies.length === 0 ? (
+                <>
+                  Enter a new patient name
+                </>
+              ) : (
+                <>
+                  Or enter a new patient name
+                </>
+              )}
+            </StyledLabel>
+            <StyledInput
+              id="lobby-input"
+              value={lobby}
+              onChange={(e) => setLobby(e.target.value)}
+              list="lobbies"
+            />
+            <datalist id="lobbies">
+              {lobbies.map((l) => (
+                <option key={l} value={l}>{l}</option>
+              ))}
+            </datalist>
+          </StyledField>
         </StyledContent>
       </Copy>
     </Modal>

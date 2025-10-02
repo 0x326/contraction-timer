@@ -22,9 +22,9 @@ describe('App tests', () => {
     expect(screen.getByRole('navigation')).toBeInTheDocument();
   });
 
-  test('prompts to join a lobby when none specified', () => {
+  test('prompts to select a patient when none specified', () => {
     render(<App />, '/');
-    expect(screen.getByRole('dialog', { name: /join a lobby/i })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: /choose a patient/i })).toBeInTheDocument();
   });
 
   test('displays the correct background colour for the current status', () => {
