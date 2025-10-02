@@ -24,7 +24,7 @@ describe('App tests', () => {
 
   test('prompts to select a patient when none specified', () => {
     render(<App />, '/');
-    expect(screen.getByRole('dialog', { name: /choose a patient/i })).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: /timer set up/i })).toBeInTheDocument();
   });
 
   test('displays the correct background colour for the current status', () => {

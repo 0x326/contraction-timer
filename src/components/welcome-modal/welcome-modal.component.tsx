@@ -47,7 +47,7 @@ export const WelcomeModal: React.FC = () => {
 
   return (
     <Modal
-      heading="Choose a patient"
+      heading="Timer set up"
       primaryButtonText="Select"
       primaryButtonOnClick={handleJoin}
       primaryButtonDisabled={!lobby}
@@ -110,11 +110,11 @@ export const WelcomeModal: React.FC = () => {
             <StyledLabel htmlFor="lobby-input">
               {lobbies.length === 0 ? (
                 <>
-                  Enter a new patient name
+                  Enter the patient&apos;s name
                 </>
               ) : (
                 <>
-                  Or enter a new patient name
+                  Or record a new patient
                 </>
               )}
             </StyledLabel>
